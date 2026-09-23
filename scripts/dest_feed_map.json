@@ -1,0 +1,917 @@
+{
+ "DEST_ADBSKIP": {
+  "file": "ALLSTATE.LNA.DEST-ADBSKIP.D20260908.txt",
+  "rules": {
+   "BR-009": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (LNA-REC-SUB-TYPE, WS-SKIP-REASON, WS-SKIP-REASON-IND) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ADBSKIP, not forced from the file.",
+    "bd": "A135000100"
+   },
+   "BR-015": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-GO-TO-NEXT-BD-REC, WS-GO-TO-NEXT-FIRM-REC, WS-GO-TO-NEXT-IP-REC, WS...) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ADBSKIP, not forced from the file.",
+    "bd": "A135000200"
+   },
+   "BR-130": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (skipReasonCode, rawRecordImage) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ADBSKIP, not forced from the file.",
+    "bd": "A135000300"
+   },
+   "BR-169": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (LNA-REC-TYPE / LNA-REC-SUB-TYPE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ADBSKIP, not forced from the file.",
+    "bd": "A135000400"
+   },
+   "BR-172": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-GO-TO-NEXT-PROFILE-REC / WS-SAVE-REC) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ADBSKIP, not forced from the file.",
+    "bd": "A135000500"
+   }
+  }
+ },
+ "DEST_CNTLRPT": {
+  "file": "ALLSTATE.LNA.DEST-CNTLRPT.D20260908.txt",
+  "rules": {
+   "BR-004": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (FILE-DATE-IND, WS-TX-DATE-VALUE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at CNTLRPT, not forced from the file.",
+    "bd": "A135000600"
+   }
+  }
+ },
+ "DEST_CNTLRPT_JAVA_EXCEPTION": {
+  "file": "ALLSTATE.LNA.DEST-CNTLRPT-JAVA-EXCEPTION.D20260908.txt",
+  "rules": {
+   "BR-002": {
+    "cls": "header-level",
+    "note": "HEADER-LEVEL: the first record of the file must not be a submitting header - not forced here; this condition needs a file of its own",
+    "bd": "A135000700"
+   },
+   "BR-003": {
+    "cls": "positive",
+    "note": "BY DESIGN: a normal run in which all three header controls match; the outcome is the control report itself, not an error",
+    "bd": "A135000800"
+   },
+   "BR-164": {
+    "cls": "header-level",
+    "note": "HEADER-LEVEL: the first record read must be type A - not forced here; this condition needs a file of its own",
+    "bd": "A135000900"
+   },
+   "BR-165": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-COMPANY-NAME vs JCL COMPANY-NAME) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at CNTLRPT + Java exception, not forced from the file.",
+    "bd": "A135001000"
+   },
+   "BR-166": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TRANS-DATE vs CYCLE-DATE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at CNTLRPT + Java exception, not forced from the file.",
+    "bd": "A135001100"
+   },
+   "BR-167": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TOT-REC-COUNT vs WS-REC-FILE-COUNT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at CNTLRPT + Java exception, not forced from the file.",
+    "bd": "A135001200"
+   },
+   "BR-168": {
+    "cls": "header-level",
+    "note": "HEADER-LEVEL: one of the three header controls (name, date, count) must fail - not forced here; this condition needs a file of its own",
+    "bd": "A135001300"
+   }
+  }
+ },
+ "DEST_ERRFILE": {
+  "file": "ALLSTATE.LNA.DEST-ERRFILE.D20260908.txt",
+  "rules": {
+   "BR-374": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ORG_SUBJ_ID, PURPOSE_CD (UTT_ALL_ORG)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ERRFILE, not forced from the file.",
+    "bd": "A135001400"
+   },
+   "BR-375": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (PRU_CNTR_NUM, PURPOSE_CD, SUBJ_ID (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ERRFILE, not forced from the file.",
+    "bd": "A135001500"
+   },
+   "BR-378": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (PRU_CNTR_NUM (UTT_ALL_ACTIVITY)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ERRFILE, not forced from the file.",
+    "bd": "A135001600"
+   },
+   "BR-382": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (NODE-ID-OUT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ERRFILE, not forced from the file.",
+    "bd": "A135001700"
+   },
+   "BR-383": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (NODE-TYP-CD) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ERRFILE, not forced from the file.",
+    "bd": "A135001800"
+   },
+   "BR-384": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (NODE_ID (UTT_ALL_NODE)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ERRFILE, not forced from the file.",
+    "bd": "A135001900"
+   },
+   "BR-386": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (OVERALL-INDICATOR, PROCESS-ID (returned by UTP27801)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at ERRFILE, not forced from the file.",
+    "bd": "A135002000"
+   }
+  }
+ },
+ "DEST_LNAERROR": {
+  "file": "ALLSTATE.LNA.DEST-LNAERROR.D20260908.txt",
+  "rules": {
+   "BR-010": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (E-RECORD-TYPE, E-SSN-TIN-NUMBER, E-ALLSTATE-ID, E-ADB-ORG-CODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135002100"
+   },
+   "BR-011": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-ERROR-CODE, WS-TEMP-ERROR-DESC, ERROR-CODES-DES) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135002200"
+   },
+   "BR-017": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-ERROR-CODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135002300"
+   },
+   "BR-047": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-NEW-BD-BUNDLE, NEXT-LNA-REC) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135002400"
+   },
+   "BR-065": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (VSAMTABL, WS-TABLE-NAME, WS-TABLE-TYPE, WS-ENCODE-VALUE, WS-DECODE-VAL...) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135002500"
+   },
+   "BR-066": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_DIST, DIST_CH_NAME, DIST_CH_CD) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135002600"
+   },
+   "BR-207": {
+    "cls": "precondition",
+    "note": "PRECONDITION: the parent broker dealer contract must already exist in UTT_ALL_CNTR - not forceable from file content",
+    "bd": "A135002700"
+   },
+   "BR-208": {
+    "cls": "precondition",
+    "note": "PRECONDITION: the firm must already be an LLE child of the BD node in UTT_ALL_NODE_REL - not forceable from file content",
+    "bd": "A135002800"
+   },
+   "BR-237": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-TIN-SSN) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135002900"
+   },
+   "BR-238": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-ENCODE-VALUE (2-char state)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003000"
+   },
+   "BR-239": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-ZIP-CODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003100"
+   },
+   "BR-240": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-PHONE-NO) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003200"
+   },
+   "BR-241": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-DATE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003300"
+   },
+   "BR-242": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-TER-DATE vs WS-TEMP-EFF-DATE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003400"
+   },
+   "BR-243": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-DATE (DOB) vs WS-CONTROL-REPORT-DATE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003500"
+   },
+   "BR-244": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-FIRST-NAME(1:1)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003600"
+   },
+   "BR-245": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-LAST-NAME(1:1), (2:1)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003700"
+   },
+   "BR-248": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-TEMP-BD-ALLSTATE-ID) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003800"
+   },
+   "BR-249": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields ((node id from above)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at LNAERROR, not forced from the file.",
+    "bd": "A135003900"
+   }
+  }
+ },
+ "DEST_REPORT_OUTPUT_NO_ERROR_PATH": {
+  "file": "ALLSTATE.LNA.DEST-REPORT-OUTPUT-NO-ERROR-PATH.D20260908.txt",
+  "rules": {
+   "BR-014": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields () are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Report output (no error path), not forced from the file.",
+    "bd": "A135004000"
+   },
+   "BR-038": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (TXN-CD, SUBJ-ID) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Report output (no error path), not forced from the file.",
+    "bd": "A135004100"
+   },
+   "BR-039": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (REL-STATUS-CD, WS-REL-STATUS, WS-PRFL-STATUS) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Report output (no error path), not forced from the file.",
+    "bd": "A135004200"
+   },
+   "BR-040": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (REL-START-DT, REL-END-DT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Report output (no error path), not forced from the file.",
+    "bd": "A135004300"
+   },
+   "BR-049": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (NODE-TYPE-CD, TXN-CD-OUT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Report output (no error path), not forced from the file.",
+    "bd": "A135004400"
+   },
+   "BR-057": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (PRU_CNTR_NUM, SUBJ_ID) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Report output (no error path), not forced from the file.",
+    "bd": "A135004500"
+   },
+   "BR-137": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields () are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Report output (no error path), not forced from the file.",
+    "bd": "A135004600"
+   }
+  }
+ },
+ "DEST_RETURNED_STATUS_ERRFILE": {
+  "file": "ALLSTATE.LNA.DEST-RETURNED-STATUS-ERRFILE.D20260908.txt",
+  "rules": {
+   "BR-073": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (NODE-ID, PROCESS-ID, OVERALL-INDICATOR, ERR-CODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135004700"
+   },
+   "BR-077": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ORG, NODE_ID, PURPOSE_CD, ORG_CD, ORG_SUBJ_ID, ORG_NAME) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135004800"
+   },
+   "BR-079": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_REL, REL_PURP_CD, REL_TYPE_CD, PRNT_NODE_ID) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135004900"
+   },
+   "BR-090": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR, PRU_CNTR_NUM, ALLSTATE_ID, SUBJ_ID, ENTITY_TYPE_CD, RES_...) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005000"
+   },
+   "BR-093": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_FIRM, TIN_NUM, FIRM_NAME, ABBR_FIRM_NAME, CRD_NUM) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005100"
+   },
+   "BR-099": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR, WS-PARENT-ENTITY, WS-PARENT-CNTR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005200"
+   },
+   "BR-113": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_PERSON, SSN_NUM, FIRST_NAME, LAST_NAME, BIRTH_DT, SEX_CD, CRD_...) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005300"
+   },
+   "BR-115": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (OVERALL-INDICATOR, ERR-CODE, ERR-DESC) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005400"
+   },
+   "BR-441": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (NODE-ID, PROCESS-ID) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005500"
+   },
+   "BR-444": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ORG_CD, ORG_SUBJ_ID, ORG_NAME (UTT_ALL_ORG)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005600"
+   },
+   "BR-445": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (REL_STATUS_CD, REL_START_DT, REL_END_DT (UTT_ALL_NODE_REL)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005700"
+   },
+   "BR-449": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (PRU_CNTR_NUM, ALLSTATE_ID, SUBJ_ID, ENTITY_TYPE_CD, RES_ST, FIRM_TYPE_...) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005800"
+   },
+   "BR-452": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (TIN_NUM, FIRM_NAME, ABBR_FIRM_NAME, CRD_NUM (UTT_ALL_FIRM)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135005900"
+   },
+   "BR-453": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ORG_CD, ORG_INITIALS (UTT_ALL_ORG)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135006000"
+   },
+   "BR-456": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ORG_CD, ORG_INITIALS (UTT_ALL_ORG)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135006100"
+   },
+   "BR-457": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-PARENT-ENTITY, PRU_CNTR_NUM, ENTITY_TYPE_CD (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135006200"
+   },
+   "BR-458": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (SSN_NUM, PREFIX_NAME through DESIGNATION_7 (UTT_ALL_PERSON)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 ERRFILE, not forced from the file.",
+    "bd": "A135006300"
+   }
+  }
+ },
+ "DEST_RETURNED_STATUS_LNAERROR": {
+  "file": "ALLSTATE.LNA.DEST-RETURNED-STATUS-LNAERROR.D20260908.txt",
+  "rules": {
+   "BR-036": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (OVERALL-INDICATOR, ERROR-CODE, TXN-CD) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135006400"
+   },
+   "BR-037": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (CTL_ID, SUBJ_ID, UPDT_TS, UPDT_BY_ID, UTT_CNTL) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135006500"
+   },
+   "BR-071": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_OA, CNTR_NUM, WS-CONTRACT-REQD-SW) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135006600"
+   },
+   "BR-254": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WSI-ALLSTATE-FIRM-NAME, WSI-PURPOSE-CD, WSI-DIST-CH-CD, WSI-LOB-CD, WS...) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135006700"
+   },
+   "BR-255": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WSI-NEW-ORG-INITIALS-SW, WSI-ORG-INITIALS) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135006800"
+   },
+   "BR-259": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields ((the broker-dealer contract lookup)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135006900"
+   },
+   "BR-263": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields ((the parent relationship lookup)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007000"
+   },
+   "BR-270": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ORG (ORG_NAME, UPDT_BY_ID, UPDT_TS)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007100"
+   },
+   "BR-271": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ORG (full row)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007200"
+   },
+   "BR-272": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ACTIVITY) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007300"
+   },
+   "BR-274": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row OFFICE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007400"
+   },
+   "BR-277": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (I-OFF-CODE (as ORG-NAME) vs UTT_ALL_ORG.ORG_NAME) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007500"
+   },
+   "BR-278": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row OFFICE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007600"
+   },
+   "BR-279": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row AGNTINIT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007700"
+   },
+   "BR-282": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (I-AGT-INIT (as ORG-NAME) vs UTT_ALL_ORG.ORG_NAME) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007800"
+   },
+   "BR-283": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row AGNTINIT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135007900"
+   },
+   "BR-284": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row NODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135008000"
+   },
+   "BR-285": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row NODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135008100"
+   },
+   "BR-286": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE (NODE_ID, NODE_TYPE_CD)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135008200"
+   },
+   "BR-287": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row AGENCIES) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135008300"
+   },
+   "BR-288": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL, control row AGENCIES) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135008400"
+   },
+   "BR-289": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WSI-PERSON-FIRM-IND) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135008500"
+   },
+   "BR-290": {
+    "cls": "fault injected",
+    "note": "C.WS-ENTITY-TYPE = 'ZZZ' (entity type outside BD / LLE / HA, so firm routing has nothing to route to)",
+    "bd": "A135008600"
+   },
+   "BR-291": {
+    "cls": "fault injected",
+    "note": "C.WS-FIRM-NAME = '' (mandatory firm name left spaces on a BD firm entity)",
+    "bd": "A135008700"
+   },
+   "BR-292": {
+    "cls": "fault injected",
+    "note": "C.WS-FIRM-NAME = '' (mandatory firm name left spaces on an LLE firm entity)",
+    "bd": "A135008800"
+   },
+   "BR-293": {
+    "cls": "fault injected",
+    "note": "C.WS-FIRM-NAME = '' (mandatory firm name left spaces on a house-account firm entity)",
+    "bd": "A135008900"
+   },
+   "BR-294": {
+    "cls": "fault injected",
+    "note": "D01.WS-FIRST-NAME = '' (mandatory first name left spaces on the producer entity)",
+    "bd": "A135009000"
+   },
+   "BR-301": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (CNTR_NUM (UTT_OA)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135009100"
+   },
+   "BR-309": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-PRFL-TYPE vs WS-RELN-EXISTS-SW) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135009200"
+   },
+   "BR-361": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL (contract number)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135009300"
+   },
+   "BR-362": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL (contract number)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135009400"
+   },
+   "BR-370": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (OVERALL-INDICATOR, ERROR-CODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR, not forced from the file.",
+    "bd": "A135009500"
+   }
+  }
+ },
+ "DEST_RETURNED_STATUS_LNAERROR_ADBERROR": {
+  "file": "ALLSTATE.LNA.DEST-RETURNED-STATUS-LNAERROR-ADBERROR.D20260908.txt",
+  "rules": {
+   "BR-042": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (OVERALL-INDICATOR, ERROR-CODE, WS-SQL-CODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135009600"
+   },
+   "BR-067": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_REL_STAT, REL_STATUS_CD) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135009700"
+   },
+   "BR-141": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (DIST_CHNL_CD, LOB_CD, SUB_CHNL_TYPE_CD, ORG_NAME) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135009800"
+   },
+   "BR-258": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields ((the broker-dealer contract lookup)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135009900"
+   },
+   "BR-262": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields ((the parent relationship lookup)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010000"
+   },
+   "BR-265": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields ((the organisation detail lookup)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010100"
+   },
+   "BR-266": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields ((the organisation detail lookup)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010200"
+   },
+   "BR-267": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WSI-PURPOSE-CD, WSI-DIST-CH-CD, WSI-LOB-CD, WSI-ORG-INITIALS vs PURPOS...) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010300"
+   },
+   "BR-275": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-OFF-CODE-X(1..5)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010400"
+   },
+   "BR-276": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (I-OFF-CODE(1:1)..(5:1)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010500"
+   },
+   "BR-280": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-AGT-INIT-X(1..3)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010600"
+   },
+   "BR-281": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (I-AGT-INIT(1:1)..(3:1)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010700"
+   },
+   "BR-296": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ALLSTATE_ID, ENTITY_TYPE_CD (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010800"
+   },
+   "BR-297": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ALLSTATE_ID, PURPOSE_CD, ENTITY_TYPE_CD (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135010900"
+   },
+   "BR-298": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ALLSTATE_ID, PURPOSE_CD, ENTITY_TYPE_CD (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011000"
+   },
+   "BR-299": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (WS-ALLSTATE-ID-BD-TEMP, PURPOSE_CD, ENTITY_TYPE_CD (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011100"
+   },
+   "BR-300": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ALLSTATE_ID, PRNT_NODE_ID, REL_PURP_CD, REL_TYPE_CD) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011200"
+   },
+   "BR-302": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ALLSTATE_ID, ENTITY_TYPE_CD, PRNT_NODE_ID, REL_PURP_CD, REL_TYPE_CD) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011300"
+   },
+   "BR-303": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (PRNT_NODE_ID, CHLD_NODE_ID, REL_PURP_CD, REL_TYPE_CD) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011400"
+   },
+   "BR-310": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (SUBJ_ID, ALLSTATE_ID (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011500"
+   },
+   "BR-311": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ALLSTATE_ID, PURPOSE_CD, ENTITY_TYPE_CD (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011600"
+   },
+   "BR-312": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (PURPOSE_CD, SSN_NUM (UTT_ALL_PERSON)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011700"
+   },
+   "BR-314": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (ALLSTATE_ID, PURPOSE_CD, ENTITY_TYPE_CD (UTT_ALL_CNTR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011800"
+   },
+   "BR-315": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (PURPOSE_CD, SSN_NUM (UTT_ALL_PERSON)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135011900"
+   },
+   "BR-323": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (SSN_CNTR_NUM, ADDR_TYPE_CD, PURPOSE_CD (UTT_ALL_ADDR)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012000"
+   },
+   "BR-330": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ORG) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012100"
+   },
+   "BR-331": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR_HT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012200"
+   },
+   "BR-332": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012300"
+   },
+   "BR-333": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_FIRM) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012400"
+   },
+   "BR-334": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_FIRM) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012500"
+   },
+   "BR-335": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ADDR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012600"
+   },
+   "BR-336": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ADDR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012700"
+   },
+   "BR-337": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ADDR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012800"
+   },
+   "BR-338": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ADDR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135012900"
+   },
+   "BR-339": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_RELHT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013000"
+   },
+   "BR-340": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_RELHT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013100"
+   },
+   "BR-341": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_RELHT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013200"
+   },
+   "BR-342": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_RELHT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013300"
+   },
+   "BR-343": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_REL) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013400"
+   },
+   "BR-344": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_REL) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013500"
+   },
+   "BR-345": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013600"
+   },
+   "BR-346": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_FIRM) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013700"
+   },
+   "BR-347": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_PERSON) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013800"
+   },
+   "BR-348": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_PERSON) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135013900"
+   },
+   "BR-349": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_PERSON) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014000"
+   },
+   "BR-350": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_FIRM, UTT_ALL_CNTR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014100"
+   },
+   "BR-351": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014200"
+   },
+   "BR-352": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE_REL, UTT_ALL_ORG) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014300"
+   },
+   "BR-353": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_DIST) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014400"
+   },
+   "BR-354": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_REL_STAT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014500"
+   },
+   "BR-355": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ACTIVITY) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014600"
+   },
+   "BR-356": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL (node identifier)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014700"
+   },
+   "BR-357": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL (node identifier)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014800"
+   },
+   "BR-358": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_NODE) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135014900"
+   },
+   "BR-359": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL (subject identifier)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015000"
+   },
+   "BR-360": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_CTL (subject identifier)) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015100"
+   },
+   "BR-363": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_PERSON) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015200"
+   },
+   "BR-364": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_PERSON) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015300"
+   },
+   "BR-365": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015400"
+   },
+   "BR-366": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_CNTR_HT) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015500"
+   },
+   "BR-367": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ADDR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015600"
+   },
+   "BR-368": {
+    "cls": "carrier - not drivable from the feed",
+    "note": "CARRIER: the rule's fields (UTT_ALL_ADDR) are internal working storage or service-layer values with no position in the feed layout. The bundle is valid and isolated; the rule is observed at Returned status \u2192 LNAERROR + ADBERROR, not forced from the file.",
+    "bd": "A135015700"
+   }
+  }
+ },
+ "POS_VALID_BASELINE": {
+  "file": "ALLSTATE.LNA.POS-VALID-BASELINE.D20260908.txt",
+  "rules": {
+   "BR-001": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135015800"
+   },
+   "BR-164": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135015900"
+   },
+   "BR-003": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016000"
+   },
+   "BR-004": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016100"
+   },
+   "BR-177": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016200"
+   },
+   "BR-191": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016300"
+   },
+   "BR-206": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016400"
+   },
+   "BR-171": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016500"
+   },
+   "BR-183": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016600"
+   },
+   "BR-219": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016700"
+   },
+   "BR-188": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016800"
+   },
+   "BR-218": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135016900"
+   },
+   "BR-220": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135017000"
+   },
+   "BR-008": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135017100"
+   },
+   "BR-167": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135017200"
+   },
+   "BR-005": {
+    "cls": "positive",
+    "note": "all fields valid; no rule violated",
+    "bd": "A135017300"
+   }
+  }
+ }
+}

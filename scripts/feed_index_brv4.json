@@ -1,0 +1,121 @@
+{
+  "ALLSTATE.LNA.BR-019.D20260908.txt": {
+    "records": 11,
+    "bundles": 2,
+    "rule": "BR-019",
+    "bundleGoodBd": "A990190100",
+    "bundleBadBd": "A990190300",
+    "badProducerSsn": "995001904",
+    "goodProducerSsn": "995001902"
+  },
+  "ALLSTATE.LNA.BR-125.D20260908.txt": {
+    "records": 13,
+    "bundles": 2,
+    "rule": "BR-125",
+    "badBundleBd": "A991250100",
+    "badBundleProducerSsns": [
+      "995012502",
+      "995012503"
+    ],
+    "controlBundleBd": "A991250400",
+    "controlProducerSsn": "995012505"
+  },
+  "ALLSTATE.LNA.BR-126.D20260908.txt": {
+    "records": 3,
+    "bundles": 2,
+    "rule": "BR-126",
+    "standaloneGoodFirmId": "A991260100",
+    "standaloneBadProducerSsn": "995012602"
+  },
+  "ALLSTATE.LNA.BR-127.D20260908.txt": {
+    "records": 8,
+    "bundles": 1,
+    "rule": "BR-127",
+    "bundleBd": "A991270100",
+    "goodProducerSsn": "995012702",
+    "badProducerSsn": "995012703"
+  },
+  "ALLSTATE.LNA.BR-128.D20260908.txt": {
+    "records": 11,
+    "bundles": 2,
+    "rule": "BR-128",
+    "bundle1Bd": "A991280100",
+    "ownMeritsProducerSsn": "000000000",
+    "consequentialSkipNote": "same producer position, D02 skipped as a consequence of its own D01 failing, not independently rejected",
+    "bundle2WholesaleBd": "A991280400"
+  },
+  "ALLSTATE.LNA.BR-256-SETUP.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-256",
+    "role": "setup",
+    "bd": "A992560100"
+  },
+  "ALLSTATE.LNA.BR-256-TEST.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-256",
+    "role": "test",
+    "bd": "A992560100"
+  },
+  "ALLSTATE.LNA.BR-257.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-257",
+    "bd": "A992570100"
+  },
+  "ALLSTATE.LNA.BR-261.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-261",
+    "bd": "A992610100"
+  },
+  "ALLSTATE.LNA.BR-269-SETUP.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-269",
+    "role": "setup",
+    "bd": "A992690100",
+    "firmName": "E2E BRV4 OLDNAME26901 LLC"
+  },
+  "ALLSTATE.LNA.BR-269-TEST.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-269",
+    "role": "test",
+    "bd": "A992690100",
+    "firmName": "E2E BRV4 NEWNAME26901 LLC"
+  },
+  "ALLSTATE.LNA.BR-273.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-273",
+    "bd": "A992730100"
+  },
+  "ALLSTATE.LNA.BR-304-SETUP.D20260908.txt": {
+    "records": 8,
+    "bundles": 1,
+    "rule": "BR-304",
+    "role": "setup",
+    "bd": "A993040100",
+    "reactivationProducerSsn": "995030402",
+    "terminationProducerSsn": "995030403"
+  },
+  "ALLSTATE.LNA.BR-304-TEST.D20260908.txt": {
+    "records": 8,
+    "bundles": 1,
+    "rule": "BR-304",
+    "role": "test",
+    "bd": "A993040100",
+    "reactivationProducerSsn": "995030402",
+    "terminationProducerSsn": "995030403"
+  },
+  "ALLSTATE.LNA.BR-369.D20260908.txt": {
+    "records": 6,
+    "bundles": 1,
+    "rule": "BR-369",
+    "bd": "A993690100",
+    "producerSsn": "995036902",
+    "producerPid": "P993690200"
+  }
+}

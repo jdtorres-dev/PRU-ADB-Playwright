@@ -1,0 +1,137 @@
+[
+  {
+    "file": "ALLSTATE.LNA.BR-019.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-019.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 11,
+    "bundles": 2,
+    "cases": ["TC-BR-019"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-125.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-125.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 13,
+    "bundles": 2,
+    "cases": ["TC-BR-125"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-126.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-126.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 3,
+    "bundles": 2,
+    "cases": ["TC-BR-126"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-127.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-127.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 8,
+    "bundles": 1,
+    "cases": ["TC-BR-127"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-128.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-128.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 11,
+    "bundles": 2,
+    "cases": ["TC-BR-128"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-256-SETUP.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-256-SETUP.D20260908.txt",
+    "role": "setup",
+    "phase": 0,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-256"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-256-TEST.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-256-TEST.D20260908.txt",
+    "role": "test",
+    "phase": 1,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-256"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-257.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-257.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-257"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-261.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-261.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-261"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-269-SETUP.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-269-SETUP.D20260908.txt",
+    "role": "setup",
+    "phase": 0,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-269"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-269-TEST.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-269-TEST.D20260908.txt",
+    "role": "test",
+    "phase": 1,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-269"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-273.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-273.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-273"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-304-SETUP.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-304-SETUP.D20260908.txt",
+    "role": "setup",
+    "phase": 0,
+    "records": 8,
+    "bundles": 1,
+    "cases": ["TC-BR-304"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-304-TEST.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-304-TEST.D20260908.txt",
+    "role": "test",
+    "phase": 1,
+    "records": 8,
+    "bundles": 1,
+    "cases": ["TC-BR-304"]
+  },
+  {
+    "file": "ALLSTATE.LNA.BR-369.D20260908.txt",
+    "path": "data/feeds/ALLSTATE.LNA.BR-369.D20260908.txt",
+    "role": "single",
+    "phase": 1,
+    "records": 6,
+    "bundles": 1,
+    "cases": ["TC-BR-369"]
+  }
+]

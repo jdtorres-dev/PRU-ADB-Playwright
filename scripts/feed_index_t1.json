@@ -1,0 +1,200 @@
+{
+ "ALLSTATE.LNA.T1-JAVA-RECOVERED.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 37,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-009",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01 record sub-type set to 03; the two recognised values are 01 and 02",
+    "bd": "A138000100",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-169",
+    "recordStart": 7,
+    "recordCount": 6,
+    "note": "an extra record whose type is X99, outside the five recognised types",
+    "bd": "A138000200",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-172",
+    "recordStart": 13,
+    "recordCount": 5,
+    "note": "the D01 repeated in the D02 position, so a profile is expected but an entity arrives",
+    "bd": "A138000300",
+    "cls": "fault injected"
+   },
+   {
+    "index": 4,
+    "br": "BR-015",
+    "recordStart": 18,
+    "recordCount": 5,
+    "note": "contra header firm name blanked (a known refusal); C, D01 and D02 follow normally and must all be drained to ADBSKIP under reason 002",
+    "bd": "A138000400",
+    "cls": "fault injected"
+   },
+   {
+    "index": 5,
+    "br": "BR-309",
+    "recordStart": 23,
+    "recordCount": 5,
+    "note": "profile type H on identifiers never presented before, so no investment professional relationship exists for them to amend",
+    "bd": "A138000500",
+    "cls": "fault injected"
+   },
+   {
+    "index": 6,
+    "br": "BR-038",
+    "recordStart": 28,
+    "recordCount": 5,
+    "note": "a valid bundle creating a new organisation; expect an ORO0OR activity entry, not an error",
+    "bd": "A138000600",
+    "cls": "marker on the extract - the validator cannot assert on ADSIMSTR yet"
+   },
+   {
+    "index": 7,
+    "br": "BR-057",
+    "recordStart": 33,
+    "recordCount": 5,
+    "note": "a valid bundle presenting a producer for appointment; expect an AP00AP marker",
+    "bd": "A138000700",
+    "cls": "marker on the extract - the validator cannot assert on ADSIMSTR yet"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.T1-BR047-PROFILE-OUT-OF-SEQUENCE.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 5,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-047",
+    "recordStart": 2,
+    "recordCount": 4,
+    "bd": "A138000800",
+    "cls": "fault injected",
+    "note": "the firm entity is present and valid; the D02 follows it with no producer entity in between, so a profile arrives out of sequence"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.HDR-BR002-NOT-HEADER.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-002",
+    "recordStart": 1,
+    "recordCount": 5,
+    "note": "the file does not begin with a submitting header - the first record is a firm entity",
+    "bd": "A138000900",
+    "cls": "header fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.HDR-BR164-FIRST-NOT-A.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 5,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-164",
+    "recordStart": 1,
+    "recordCount": 5,
+    "note": "the first record read is a contra header, not record type A",
+    "bd": "A138001000",
+    "cls": "header fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.HDR-BR168-CONTROL-FAILS.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-168",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "one of the three header controls fails, which must stop the run. Overlaps BR-167; the duplicate check flags these two against each other",
+    "bd": "A138001100",
+    "cls": "header fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.HDR-BR165-COMPANY.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-165",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "company name on the submitting header does not match the name supplied to the job",
+    "bd": "A138001200",
+    "cls": "header fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.HDR-BR166-TRANSDATE.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-166",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "transmission date on the header does not equal the cycle date (Feed Date) set in the console",
+    "bd": "A138001300",
+    "cls": "header fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.HDR-BR167-RECCOUNT.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "java-recovered",
+  "destination": "",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-167",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "record count declared on the header does not match the number of records present",
+    "bd": "A138001400",
+    "cls": "header fault injected"
+   }
+  ]
+ }
+}

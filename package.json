@@ -1,0 +1,28 @@
+{
+  "name": "pru-adb-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright + TypeScript automation for the PRU ADB HR Master Console (BRD v4 test suite)",
+  "scripts": {
+    "test": "playwright test --project=smoke",
+    "test:headed": "playwright test --project=smoke --headed",
+    "test:smoke": "playwright test --project=smoke",
+    "test:list": "playwright test --list",
+    "e2e:execute": "playwright test --project=e2e-execute",
+    "e2e:execute:plan": "playwright test --project=e2e-execute --list",
+    "e2e:validate": "playwright test --project=e2e-validate",
+    "report": "playwright show-report",
+    "report:build": "tsx scripts/generate-report.ts",
+    "typecheck": "tsc --noEmit",
+    "reissue": "python scripts/reissue_e2e.py",
+    "registry:build": "python scripts/build_registry.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^20.14.0",
+    "adm-zip": "^0.5.16",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

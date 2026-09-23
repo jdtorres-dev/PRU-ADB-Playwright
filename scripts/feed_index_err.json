@@ -1,0 +1,1519 @@
+{
+ "ALLSTATE.LNA.B0100.D20260908.txt": {
+  "code": "B0100",
+  "description": "ALLSTATE FIRM NAME NOT VALUED. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-174",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "B.WS-ALLST-FIRM-NAME = '' (firm name not valued)",
+    "bd": "A130000100",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0200.D20260908.txt": {
+  "code": "B0200",
+  "description": "ALLSTATE DISTRIBUTION CHANNEL INVALID OR NOT VALUED. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-175",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "B.WS-ALLST-DIST-CHANNEL = 'ZZ' (distribution channel outside the permitted set)",
+    "bd": "A130000200",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0300.D20260908.txt": {
+  "code": "B0300",
+  "description": "ALLSTATE BD ID NOT VALUED. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-176",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "B.WS-BD-ALLSTATE-ID = '' (BD identifier not valued)",
+    "bd": "A130000300",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0400.D20260908.txt": {
+  "code": "B0400",
+  "description": "NO \"FIRM ENTITY\" RECORD IN THE LNA FILE FOR THE BD FIRM. BD FIRM BUNDLE REJECTED",
+  "records": 9,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-170",
+    "recordStart": 2,
+    "recordCount": 4,
+    "note": "structural: bundle omits its firm entity record; the next contra header arrives first",
+    "bd": "A130000400",
+    "cls": "structural"
+   },
+   {
+    "index": 2,
+    "br": "BR-173",
+    "recordStart": 6,
+    "recordCount": 4,
+    "note": "structural: bundle omits its firm entity record; the next contra header arrives first",
+    "bd": "A130000500",
+    "cls": "structural"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0500.D20260908.txt": {
+  "code": "B0500",
+  "description": "FIRST \"FIRM ENTITY\" RECORD DOES NOT BELONG TO A BD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-178",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-ENTITY-TYPE = 'LLE' (first firm entity is not a BD)",
+    "bd": "A130000600",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0601.D20260908.txt": {
+  "code": "B0601",
+  "description": "\"TAX ID\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-179",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-TAX-ID-NUM = '111111111' (reserved tax identifier)",
+    "bd": "A130000700",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0602.D20260908.txt": {
+  "code": "B0602",
+  "description": "\"FIRM NAME\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-180",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-FIRM-NAME = '' (firm name blank)",
+    "bd": "A130000800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0604.D20260908.txt": {
+  "code": "B0604",
+  "description": "\"ALLSTATE ID\" NOT VALUED IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-181",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-ALLSTATE-ID = '' (Allstate identifier not valued)",
+    "bd": "A130000900",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0605.D20260908.txt": {
+  "code": "B0605",
+  "description": "\"FIRM TYPE CODE\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-182",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-FIRM-TYPE = 'ZZ' (firm type absent from the reference table)",
+    "bd": "A130001000",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0606.D20260908.txt": {
+  "code": "B0606",
+  "description": "\"RESIDENT STATE\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-183",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-RES-STATE = 'ZZ' (resident state absent from the state table)",
+    "bd": "A130001100",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0607.D20260908.txt": {
+  "code": "B0607",
+  "description": "\"BUSINESS ADDRESS\" NOT VALUED OR INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 11,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-018",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-BUS-COMM-ADD-L1 = '' (business address line 1 blank while city/state/ZIP present)",
+    "bd": "A130001200",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-184",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "C.WS-BUS-COMM-ADD-L1 = '' (business address line 1 blank while city/state/ZIP present)",
+    "bd": "A130001300",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0608.D20260908.txt": {
+  "code": "B0608",
+  "description": "\"CORRESPONDENCE ADDRESS\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-185",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-CORRES-ADD-L1 = '' (correspondence address line 1 blank)",
+    "bd": "A130001400",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0609.D20260908.txt": {
+  "code": "B0609",
+  "description": "\"PROFILE STATUS\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-186",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-PROFILE-STATUS = 'X' (profile status outside A / I / T)",
+    "bd": "A130001500",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0610.D20260908.txt": {
+  "code": "B0610",
+  "description": "\"EFFECTIVE DATE OF PROFILE STATUS\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 11,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-046",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-PROF-START-DT = '00000000' (profile start date not a real date)",
+    "bd": "A130001600",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-187",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "C.WS-PROF-START-DT = '00000000' (profile start date not a real date)",
+    "bd": "A130001700",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0611.D20260908.txt": {
+  "code": "B0611",
+  "description": "\"TERMINATION DATE OF PROFILE STATUS\" INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-188",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-PROF-TERM-DT = '00000000' (profile termination date not a real date)",
+    "bd": "A130001800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0612.D20260908.txt": {
+  "code": "B0612",
+  "description": "\"ALLSTATE ID FOR FIRM\" NOT VALUED IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-190",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-FIRM-ALLSTATE-ID = '' (firm Allstate identifier not valued)",
+    "bd": "A130001900",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0613.D20260908.txt": {
+  "code": "B0613",
+  "description": "\"ALLSTATE ID OF BD\" NOT VALUED OR INVALID IN THE FIRST \"FIRM ENTITY\" (BD) RECORD. BD FIRM BUNDLE REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-189",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "C.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier not valued)",
+    "bd": "A130002000",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.B0700.D20260908.txt": {
+  "code": "B0700",
+  "description": "ALLSTATE BD ID ALREADY PRESENT IN ADB AS BD. BD FIRM BUNDLE REJECTED",
+  "records": 11,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-177",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: the broker dealer named on the contra header must ALREADY exist in ADB",
+    "bd": "A130002100",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-250",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "precondition: the broker dealer named on the contra header must ALREADY exist in ADB",
+    "bd": "A130002200",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0701.D20260908.txt": {
+  "code": "C0701",
+  "description": "\"TAX ID\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 8,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-192",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-TAX-ID-NUM = '111111111' (reserved tax identifier) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130002300",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 8,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-TAX-ID-NUM = '111111111' (reserved tax identifier)",
+    "bd": "A130002400",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0702.D20260908.txt": {
+  "code": "C0702",
+  "description": "\"FIRM NAME\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 8,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-193",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-FIRM-NAME = '' (firm name blank) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130002500",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 8,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-FIRM-NAME = '' (firm name blank)",
+    "bd": "A130002600",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0704.D20260908.txt": {
+  "code": "C0704",
+  "description": "\"ALLSTATE ID\" NOT VALUED IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 8,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-194",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-ALLSTATE-ID = '' (Allstate identifier not valued) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130002700",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 8,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-ALLSTATE-ID = '' (Allstate identifier not valued)",
+    "bd": "A130002800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0705.D20260908.txt": {
+  "code": "C0705",
+  "description": "\"FIRM TYPE CODE\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 8,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-195",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-FIRM-TYPE = 'ZZ' (firm type absent from the reference table) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130002900",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 8,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-FIRM-TYPE = 'ZZ' (firm type absent from the reference table)",
+    "bd": "A130003000",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0706.D20260908.txt": {
+  "code": "C0706",
+  "description": "\"RESIDENT STATE\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 8,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-196",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-RES-STATE = 'ZZ' (resident state absent from the state table) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130003100",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 8,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-RES-STATE = 'ZZ' (resident state absent from the state table)",
+    "bd": "A130003200",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0707.D20260908.txt": {
+  "code": "C0707",
+  "description": "\"BUSINESS ADDRESS\" NOT VALUED OR INVALID IN THE \"FIRM ENTITY\" RECORD  -  RECORD REJECTED",
+  "records": 8,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-197",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-BUS-COMM-ADD-L1 = '' (business address line 1 blank while city/state/ZIP present) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130003300",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 8,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-BUS-COMM-ADD-L1 = '' (business address line 1 blank while city/state/ZIP present)",
+    "bd": "A130003400",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0708.D20260908.txt": {
+  "code": "C0708",
+  "description": "\"CORRESPONDENCE ADDRESS\" INVALID IN THE \"FIRM ENTITY\" RECORD  -  RECORD REJECTED",
+  "records": 8,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-198",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-CORRES-ADD-L1 = '' (correspondence address line 1 blank) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130003500",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 8,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-CORRES-ADD-L1 = '' (correspondence address line 1 blank)",
+    "bd": "A130003600",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0709.D20260908.txt": {
+  "code": "C0709",
+  "description": "\"PROFILE STATUS\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 14,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-058",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-PROFILE-STATUS = 'X' (profile status outside A / T / I) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130003700",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-201",
+    "recordStart": 8,
+    "recordCount": 6,
+    "note": "C.WS-PROFILE-STATUS = 'X' (profile status outside A / T / I) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130003800",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-209",
+    "recordStart": 14,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-PROFILE-STATUS = 'X' (profile status outside A / T / I)",
+    "bd": "A130003900",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0710.D20260908.txt": {
+  "code": "C0710",
+  "description": "\"EFFECTIVE DATE OF PROFILE STATUS\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 14,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-059",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-PROF-START-DT = '00000000' (profile start date not a real date) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130004000",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-202",
+    "recordStart": 8,
+    "recordCount": 6,
+    "note": "C.WS-PROF-START-DT = '00000000' (profile start date not a real date) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130004100",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-209",
+    "recordStart": 14,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-PROF-START-DT = '00000000' (profile start date not a real date)",
+    "bd": "A130004200",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0711.D20260908.txt": {
+  "code": "C0711",
+  "description": "\"TERMINATION DATE OF PROFILE STATUS\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 14,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-060",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-PROF-TERM-DT = '00000000' (profile termination date not a real date) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130004300",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-203",
+    "recordStart": 8,
+    "recordCount": 6,
+    "note": "C.WS-PROF-TERM-DT = '00000000' (profile termination date not a real date) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130004400",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-209",
+    "recordStart": 14,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-PROF-TERM-DT = '00000000' (profile termination date not a real date)",
+    "bd": "A130004500",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0712.D20260908.txt": {
+  "code": "C0712",
+  "description": "\"ALLSTATE ID FOR FIRM\" NOT VALUED IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 14,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-061",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-FIRM-ALLSTATE-ID = '' (firm Allstate identifier not valued) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130004600",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-205",
+    "recordStart": 8,
+    "recordCount": 6,
+    "note": "C.WS-FIRM-ALLSTATE-ID = '' (firm Allstate identifier not valued) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130004700",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-209",
+    "recordStart": 14,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-FIRM-ALLSTATE-ID = '' (firm Allstate identifier not valued)",
+    "bd": "A130004800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0713.D20260908.txt": {
+  "code": "C0713",
+  "description": "\"ALLSTATE ID OF BD\" NOT VALUED OR INVALID IN THE \"FIRM ENTITY\" RECORD - RECORD REJECTED",
+  "records": 26,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-062",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier not valued) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130004900",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-204",
+    "recordStart": 8,
+    "recordCount": 6,
+    "note": "C.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier not valued) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130005000",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-209",
+    "recordStart": 14,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier not valued)",
+    "bd": "A130005100",
+    "cls": "fault injected"
+   },
+   {
+    "index": 4,
+    "br": "BR-210",
+    "recordStart": 15,
+    "recordCount": 6,
+    "note": "C.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier not valued) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130005200",
+    "cls": "fault injected"
+   },
+   {
+    "index": 5,
+    "br": "BR-211",
+    "recordStart": 21,
+    "recordCount": 6,
+    "note": "C.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier not valued) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130005300",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0714.D20260908.txt": {
+  "code": "C0714",
+  "description": "MORE THAN ONE \"ACTIVE\" BD ENTITY TYPE NOT ALLOWED WITH IN A BD FIRM BUNDLE - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-199",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: a second BD entity with profile status A inside the same bundle",
+    "bd": "A130005400",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | precondition: a second BD entity with profile status A inside the same bundle",
+    "bd": "A130005500",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0715.D20260908.txt": {
+  "code": "C0715",
+  "description": "ACTIVE LLE'S / HA'S PRESENT WITH IN A TERMINATED BD FIRM BUNDLE  - RECORD PROCESSED. NOTIFY ALLSTATE",
+  "records": 17,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-063",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: an active LLE or HA inside a bundle whose broker dealer is terminated",
+    "bd": "A130005600",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-200",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "precondition: an active LLE or HA inside a bundle whose broker dealer is terminated",
+    "bd": "A130005700",
+    "cls": "precondition"
+   },
+   {
+    "index": 3,
+    "br": "BR-209",
+    "recordStart": 12,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | precondition: an active LLE or HA inside a bundle whose broker dealer is terminated",
+    "bd": "A130005800",
+    "cls": "precondition"
+   },
+   {
+    "index": 4,
+    "br": "BR-212",
+    "recordStart": 13,
+    "recordCount": 5,
+    "note": "precondition: an active LLE or HA inside a bundle whose broker dealer is terminated",
+    "bd": "A130005900",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0716.D20260908.txt": {
+  "code": "C0716",
+  "description": "\"ENTITY TYPE\" INVALID IN THE \"FIRM ENTITY\" RECORD  - RECORD REJECTED",
+  "records": 14,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-064",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "C.WS-ENTITY-TYPE = 'ZZZ' (entity type outside BD / LLE / HA) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130006000",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-191",
+    "recordStart": 8,
+    "recordCount": 6,
+    "note": "C.WS-ENTITY-TYPE = 'ZZZ' (entity type outside BD / LLE / HA) | presented as a legal entity beneath a valid broker dealer, so the code names a subsequent firm entity rather than the first",
+    "bd": "A130006100",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-209",
+    "recordStart": 14,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | C.WS-ENTITY-TYPE = 'ZZZ' (entity type outside BD / LLE / HA)",
+    "bd": "A130006200",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.C0717.D20260908.txt": {
+  "code": "C0717",
+  "description": "HA RECORD REJECTED BECAUSE THE FUNCTIONAL MANAGER(BD OR LLE) RECORD WAS NOT FOUND",
+  "records": 12,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-206",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: a house account whose functional manager record is not present",
+    "bd": "A130006300",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-209",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone C record outside any bundle | precondition: a house account whose functional manager record is not present",
+    "bd": "A130006400",
+    "cls": "precondition"
+   },
+   {
+    "index": 3,
+    "br": "BR-213",
+    "recordStart": 8,
+    "recordCount": 5,
+    "note": "precondition: a house account whose functional manager record is not present",
+    "bd": "A130006500",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D0101.D20260908.txt": {
+  "code": "D0101",
+  "description": "SSN INVALID IN THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-214",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01.WS-SOC-SEC-NUM = '12345ABCD' (identifier not nine numeric positions)",
+    "bd": "A130006600",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-221",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D01 record outside any bundle | D01.WS-SOC-SEC-NUM = '12345ABCD' (identifier not nine numeric positions)",
+    "bd": "A130006700",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D0102.D20260908.txt": {
+  "code": "D0102",
+  "description": "FIRST NAME INVALID IN THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-215",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01.WS-FIRST-NAME = '' (first name blank)",
+    "bd": "A130006800",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-221",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D01 record outside any bundle | D01.WS-FIRST-NAME = '' (first name blank)",
+    "bd": "A130006900",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D0103.D20260908.txt": {
+  "code": "D0103",
+  "description": "LAST NAME INVALID IN THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-216",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01.WS-LAST-NAME = '' (last name blank)",
+    "bd": "A130007000",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-221",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D01 record outside any bundle | D01.WS-LAST-NAME = '' (last name blank)",
+    "bd": "A130007100",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D0104.D20260908.txt": {
+  "code": "D0104",
+  "description": "DATE OF BIRTH INVALID IN THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-217",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01.WS-DOB = '20110909' (date of birth under the 5,844-day minimum)",
+    "bd": "A130007200",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-221",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D01 record outside any bundle | D01.WS-DOB = '20110909' (date of birth under the 5,844-day minimum)",
+    "bd": "A130007300",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D0105.D20260908.txt": {
+  "code": "D0105",
+  "description": "SEX CODE INVALID IN THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-218",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01.WS-SEX-CD = 'X' (sex code outside M / F / U / blank)",
+    "bd": "A130007400",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-221",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D01 record outside any bundle | D01.WS-SEX-CD = 'X' (sex code outside M / F / U / blank)",
+    "bd": "A130007500",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D0106.D20260908.txt": {
+  "code": "D0106",
+  "description": "HOME ADDRESS INVALID IN THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 12,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-021",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01.WS-HOME-ADD-L1 = '' (home address line 1 blank while city/state/ZIP present)",
+    "bd": "A130007600",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-219",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "D01.WS-HOME-ADD-L1 = '' (home address line 1 blank while city/state/ZIP present)",
+    "bd": "A130007700",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-221",
+    "recordStart": 12,
+    "recordCount": 1,
+    "note": "standalone D01 record outside any bundle | D01.WS-HOME-ADD-L1 = '' (home address line 1 blank while city/state/ZIP present)",
+    "bd": "A130007800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D0107.D20260908.txt": {
+  "code": "D0107",
+  "description": "DESIGNATIONS INVALID IN THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 12,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-220",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D01.WS-DESIGNATION1-7 = 'ZZZZZ' (designation absent from the reference table)",
+    "bd": "A130007900",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-221",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D01 record outside any bundle | D01.WS-DESIGNATION1-7 = 'ZZZZZ' (designation absent from the reference table)",
+    "bd": "A130008000",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-246",
+    "recordStart": 8,
+    "recordCount": 5,
+    "note": "D01.WS-DESIGNATION1-7 = 'ZZZZZ' (designation absent from the reference table)",
+    "bd": "A130008100",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.D2731.D20260908.txt": {
+  "code": "D2731",
+  "description": "ADB PROCESSING ERROR - ALLSTATE LNA DAILY DRIVER (UTP27301)",
+  "records": 11,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-212",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: relationship status A where the parent broker dealer relationship is absent",
+    "bd": "A130008200",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-236",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "precondition: relationship status A where the parent broker dealer relationship is absent",
+    "bd": "A130008300",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.E0100.D20260908.txt": {
+  "code": "E0100",
+  "description": "NO \"PRODUCER PROFILE\" RECORD FOUND UNDER A \"PRODUCER ENTITY\" RECORD - \"PRODUCER ENTITY\" RECORD REJECTED",
+  "records": 6,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-171",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "structural: a second producer entity record arrives in place of the producer profile",
+    "bd": "A130008400",
+    "cls": "structural"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0101.D20260908.txt": {
+  "code": "F0101",
+  "description": "SSN PRESENT IN THE \"PRODUCER PROFILE\" RECORD DOES NOT MATCH THE \"PRODUCER ENTITY\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-222",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-SOC-SEC-NUM = '987654321' (identifier does not match the producer entity record)",
+    "bd": "A130008500",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-SOC-SEC-NUM = '987654321' (identifier does not match the producer entity record)",
+    "bd": "A130008600",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0102.D20260908.txt": {
+  "code": "F0102",
+  "description": "PROFILE TYPE INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-223",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-PROF-TYPE = 'X' (profile type is neither C nor H)",
+    "bd": "A130008700",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-PROF-TYPE = 'X' (profile type is neither C nor H)",
+    "bd": "A130008800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0103.D20260908.txt": {
+  "code": "F0103",
+  "description": "ALLSTATE ID INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-224",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-ALLSTATE-ID = '' (Allstate identifier blank)",
+    "bd": "A130008900",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-ALLSTATE-ID = '' (Allstate identifier blank)",
+    "bd": "A130009000",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0104.D20260908.txt": {
+  "code": "F0104",
+  "description": "BUSINESS ADDRESS INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-225",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-BUS-ADD-L1 = '' (business address line 1 blank)",
+    "bd": "A130009100",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-BUS-ADD-L1 = '' (business address line 1 blank)",
+    "bd": "A130009200",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0105.D20260908.txt": {
+  "code": "F0105",
+  "description": "RESIDENT STATE INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-226",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-RES-STATE = 'ZZ' (resident state absent from the state table)",
+    "bd": "A130009300",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-RES-STATE = 'ZZ' (resident state absent from the state table)",
+    "bd": "A130009400",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0106.D20260908.txt": {
+  "code": "F0106",
+  "description": "PRODUCER ROLE INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-227",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-PROD-ROLE = 'ABC' (producer role must be spaces)",
+    "bd": "A130009500",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-PROD-ROLE = 'ABC' (producer role must be spaces)",
+    "bd": "A130009600",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0107.D20260908.txt": {
+  "code": "F0107",
+  "description": "ALLSTATE ID OF THE FIRM INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-228",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-FIRM-ALLSTATE-ID = '' (firm Allstate identifier blank)",
+    "bd": "A130009700",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-FIRM-ALLSTATE-ID = '' (firm Allstate identifier blank)",
+    "bd": "A130009800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0108.D20260908.txt": {
+  "code": "F0108",
+  "description": "ALLSTATE ID OF THE BD INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 12,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-229",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier blank)",
+    "bd": "A130009900",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier blank)",
+    "bd": "A130010000",
+    "cls": "fault injected"
+   },
+   {
+    "index": 3,
+    "br": "BR-234",
+    "recordStart": 8,
+    "recordCount": 5,
+    "note": "D02.WS-BD-ALLSTATE-ID = '' (BD Allstate identifier blank)",
+    "bd": "A130010100",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0109.D20260908.txt": {
+  "code": "F0109",
+  "description": "IP RELATIONSHIP IS \"ACTIVE\" WITH IN A TERMINATED \"BD FIRM BUNDLE\" - RECORD PROCESSED. NOTIFY ALLSTATE",
+  "records": 12,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-230",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: relationship status A inside a bundle whose broker dealer is terminated",
+    "bd": "A130010200",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | precondition: relationship status A inside a bundle whose broker dealer is terminated",
+    "bd": "A130010300",
+    "cls": "precondition"
+   },
+   {
+    "index": 3,
+    "br": "BR-236",
+    "recordStart": 8,
+    "recordCount": 5,
+    "note": "precondition: relationship status A inside a bundle whose broker dealer is terminated",
+    "bd": "A130010400",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0110.D20260908.txt": {
+  "code": "F0110",
+  "description": "RELATIONSHIP STATUS INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-230",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-RELN-STATUS = 'X' (relationship status outside A / T / I)",
+    "bd": "A130010500",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-RELN-STATUS = 'X' (relationship status outside A / T / I)",
+    "bd": "A130010600",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0111.D20260908.txt": {
+  "code": "F0111",
+  "description": "RELATIONSHIP START DATE INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-231",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-RELN-START-DT = '00000000' (relationship start date not a real date)",
+    "bd": "A130010700",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-RELN-START-DT = '00000000' (relationship start date not a real date)",
+    "bd": "A130010800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0112.D20260908.txt": {
+  "code": "F0112",
+  "description": "RELATIONSHIP END DATE INVALID IN THE \"PRODUCER PROFILE\" RECORD - RECORD REJECTED",
+  "records": 7,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-232",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "D02.WS-RELN-END-DT = '00000000' (relationship end date not a real date)",
+    "bd": "A130010900",
+    "cls": "fault injected"
+   },
+   {
+    "index": 2,
+    "br": "BR-233",
+    "recordStart": 7,
+    "recordCount": 1,
+    "note": "standalone D02 record outside any bundle | D02.WS-RELN-END-DT = '00000000' (relationship end date not a real date)",
+    "bd": "A130011000",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.F0113.D20260908.txt": {
+  "code": "F0113",
+  "description": "IP RECORD REJECTED BECAUSE THE FUNCTIONAL MANAGER(BD OR LLE) RECORD WAS NOT FOUND",
+  "records": 11,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-228",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: an investment professional whose functional manager record is not present",
+    "bd": "A130011100",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-235",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "precondition: an investment professional whose functional manager record is not present",
+    "bd": "A130011200",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.O2711.D20260908.txt": {
+  "code": "O2711",
+  "description": "ADB PROCESSING ERROR - ORG. CODE CREATION (UTP27101)",
+  "records": 11,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-048",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: the organisation service must return an unsuccessful outcome - not forceable from file content",
+    "bd": "A130011300",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-251",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "precondition: the organisation service must return an unsuccessful outcome - not forceable from file content",
+    "bd": "A130011400",
+    "cls": "precondition"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.P2721.D20260908.txt": {
+  "code": "P2721",
+  "description": "ADB PROCESSING ERROR - PROFILE CREATION (UTP27201)",
+  "records": 16,
+  "family": "error-code",
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-048",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "precondition: the appointment service must return an unsuccessful outcome - not forceable from file content",
+    "bd": "A130011500",
+    "cls": "precondition"
+   },
+   {
+    "index": 2,
+    "br": "BR-252",
+    "recordStart": 7,
+    "recordCount": 5,
+    "note": "precondition: the appointment service must return an unsuccessful outcome - not forceable from file content",
+    "bd": "A130011600",
+    "cls": "precondition"
+   },
+   {
+    "index": 3,
+    "br": "BR-253",
+    "recordStart": 12,
+    "recordCount": 5,
+    "note": "precondition: the appointment service must return an unsuccessful outcome - not forceable from file content",
+    "bd": "A130011700",
+    "cls": "precondition"
+   }
+  ]
+ }
+}

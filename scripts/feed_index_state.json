@@ -1,0 +1,192 @@
+{
+ "ALLSTATE.LNA.STATE-C0714-SECOND-ACTIVE-BD.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 7,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-199",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "a second firm entity of type BD carrying profile status A in the same bundle",
+    "bd": "A139000100",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-C0715-LLE-ACTIVE-UNDER-TERMINATED-BD-063.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 7,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-063",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "broker dealer profile status T (terminated) with an active LLE beneath it",
+    "bd": "A139000200",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-C0715-HA-ACTIVE-UNDER-TERMINATED-BD-200.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 7,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-200",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "broker dealer profile status T (terminated) with an active HA beneath it",
+    "bd": "A139000300",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-C0715-LLE-ACTIVE-UNDER-TERMINATED-BD-212.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 7,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-212",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "broker dealer profile status T (terminated) with an active LLE beneath it",
+    "bd": "A139000400",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-C0717-HA-NO-MANAGER-206.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 7,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-206",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "house account whose functional manager identifier A139000599 is present in no bundle and exists nowhere in ADB",
+    "bd": "A139000500",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-C0717-HA-NO-MANAGER-213.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 7,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-213",
+    "recordStart": 2,
+    "recordCount": 6,
+    "note": "house account whose functional manager identifier A139000699 is present in no bundle and exists nowhere in ADB",
+    "bd": "A139000600",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-F0113-IP-NO-MANAGER.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-235",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "producer profile pointing at functional manager A139000798, which is in no bundle and exists nowhere in ADB",
+    "bd": "A139000700",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-D2731-ACTIVE-UNDER-TERMINATED-BD.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-236",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "broker dealer profile status T with a producer profile carrying relationship status A",
+    "bd": "A139000800",
+    "cls": "fault injected"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.SETUP-B0700-COMMIT-BD.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "setup",
+  "destination": "",
+  "phase": 0,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "(setup)",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "a wholly valid bundle whose only job is to commit broker dealer A139000900",
+    "bd": "A139000900",
+    "cls": "setup"
+   }
+  ]
+ },
+ "ALLSTATE.LNA.STATE-B0700-DUPLICATE-BD.D20260908.txt": {
+  "code": "",
+  "description": "",
+  "records": 6,
+  "family": "state",
+  "destination": "",
+  "phase": 1,
+  "bundles": [
+   {
+    "index": 1,
+    "br": "BR-177",
+    "recordStart": 2,
+    "recordCount": 5,
+    "note": "broker dealer A139000900 was committed by SETUP-B0700-COMMIT-BD in the same run; this bundle presents it a second time",
+    "bd": "A139000900",
+    "cls": "fault injected"
+   }
+  ]
+ }
+}

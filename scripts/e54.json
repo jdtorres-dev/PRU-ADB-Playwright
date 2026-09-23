@@ -1,0 +1,488 @@
+{
+ "BR-009": {
+  "dest": "ADBSKIP",
+  "java": "SkippedRecordEntry carrying the record's position and SkipReasonCode (001 INVALID_RECORD_TYPE / 002 EARLIER_BUNDLE_RECORD_FAILED)",
+  "topic": "Record Structure and Sequence",
+  "rule": "A producer record carrying an unrecognised sub-type is set aside on the skip report rather than being refused or processed, and the reason recorded distinguishes a record skipped in its own right from one skipped because its parent was already in error",
+  "cond": "A producer record whose sub-type is neither of the two recognised values",
+  "thr": "Two skip reasons: the record was not recognised, or an earlier record in the same group had already failed",
+  "prog": "UTP27301"
+ },
+ "BR-015": {
+  "dest": "ADBSKIP",
+  "java": "SkippedRecordEntry, SkipReasonCode.EARLIER_BUNDLE_RECORD_FAILED (002), for every record drained to the next contra header",
+  "topic": "Record Structure and Sequence",
+  "rule": "A refused contra header suppresses the whole bundle beneath it: the firm records, the producer records and the producer profiles that belong to that broker dealer are all set aside without being examined",
+  "cond": "Any refusal on the contra header record",
+  "thr": "Four navigation switches govern which record kinds are still accepted after a failure",
+  "prog": "UTP27301"
+ },
+ "BR-169": {
+  "dest": "ADBSKIP",
+  "java": "SkippedRecordEntry (SkipReasonCode.INVALID_RECORD_TYPE = 001 / EARLIER_BUNDLE_RECORD_FAILED = 002); no LNAERROR row",
+  "topic": "Validation - Record Routing",
+  "rule": "A record whose type and sub-type is not one of B, C, D01, D02 or Z is not processed. It is written to the skip report under reason 001 where the run is a normal run, or reason 002 where the run is recovering from a restart.",
+  "cond": "Record type/sub-type outside B/C/D01/D02/Z",
+  "thr": "Recognised types: B, C, D01, D02, Z. Skip reason 001 (normal) or 002 (restart)",
+  "prog": "UTP27301"
+ },
+ "BR-172": {
+  "dest": "ADBSKIP",
+  "java": "SkippedRecordEntry (SkipReasonCode.INVALID_RECORD_TYPE = 001 / EARLIER_BUNDLE_RECORD_FAILED = 002); no LNAERROR row",
+  "topic": "Validation - Record Routing",
+  "rule": "Where a producer profile record is expected but a producer entity record was saved in its place, the record is not processed and is written to the skip report under reason 001, or reason 002 where the run is recovering from a restart.",
+  "cond": "Profile record expected but a D01 was saved instead",
+  "thr": "Skip reason 001 (normal) or 002 (restart)",
+  "prog": "UTP27301"
+ },
+ "BR-004": {
+  "dest": "CNTLRPT",
+  "java": "Control-report line only, not an error. The date control prints as not applicable; the other two still run",
+  "topic": "Interface Control",
+  "rule": "The date control may be waived for a given run, and where it is waived the control report records it as not applicable rather than as satisfied",
+  "cond": "The date-check indicator set to the negative value",
+  "thr": "One indicator with two permitted values",
+  "prog": "UTP27301"
+ },
+ "BR-165": {
+  "dest": "CNTLRPT + Java exception",
+  "java": "ControlReport.forHeaderValidationFailure(company/date/count) written, then InterfaceValidationException thrown - no records processed",
+  "topic": "Validation - Interface Control",
+  "rule": "The company name carried on the submitting header (WS-COMPANY-NAME) must match the company name supplied to the job. A mismatch marks the header invalid and is reported as a company mismatch on the control report.",
+  "cond": "Must match",
+  "thr": "",
+  "prog": "UTP27301"
+ },
+ "BR-166": {
+  "dest": "CNTLRPT + Java exception",
+  "java": "ControlReport.forHeaderValidationFailure(company/date/count) written, then InterfaceValidationException thrown - no records processed",
+  "topic": "Validation - Interface Control",
+  "rule": "The transmission date carried on the submitting header (WS-TRANS-DATE) must equal the cycle date supplied to the job. This comparison is made only where the date-check indicator is set to Y. A mismatch marks the header invalid and is reported as a date mismatch on the control report.",
+  "cond": "Must equal (only if FILE-DATE-IND='Y')",
+  "thr": "Compared only when FILE-DATE-IND = Y",
+  "prog": "UTP27301"
+ },
+ "BR-167": {
+  "dest": "CNTLRPT + Java exception",
+  "java": "ControlReport.forHeaderValidationFailure(company/date/count) written, then InterfaceValidationException thrown - no records processed",
+  "topic": "Validation - Interface Control",
+  "rule": "The total record count declared on the submitting header (WS-TOT-REC-COUNT) must match the count held on the external record-count file. A mismatch marks the header invalid and is reported as a count mismatch on the control report.",
+  "cond": "Header record count must match external RECCOUNT file",
+  "thr": "",
+  "prog": "UTP27301"
+ },
+ "BR-374": {
+  "dest": "ERRFILE",
+  "java": "ActivityErrorEntry D001 carrying node kind, code and the table searched -> ErrorArtifactExportService.exportActivityErrors, errfile-<CCYYMMDD>.csv",
+  "topic": "Validation - Activity Extraction",
+  "rule": "An organisation named by an activity group must exist on the organisation table for the partner interface purpose before its node and organisation code are extracted. An organisation that cannot be found is reported under D001 naming the table the lookup failed on, and no extract record is written for it.",
+  "cond": "SQLCODE = 0 (found) vs SQLCODE NOT = 0 (not found/error)",
+  "thr": "Found writes an extract record with node type O; not found reports D001",
+  "prog": "UTP27601"
+ },
+ "BR-375": {
+  "dest": "ERRFILE",
+  "java": "ActivityErrorEntry D001 -> ErrorArtifactExportService.exportActivityErrors, errfile-<CCYYMMDD>.csv",
+  "topic": "Validation - Activity Extraction",
+  "rule": "A contract named by an activity group must exist on the contract table for the person and purpose before its node and entity type are extracted. A contract that cannot be found is reported under D001 naming the table the lookup failed on.",
+  "cond": "SQLCODE = 0 (found) vs SQLCODE NOT = 0",
+  "thr": "Found writes an extract record with node type C; not found reports D001",
+  "prog": "UTP27601"
+ },
+ "BR-378": {
+  "dest": "ERRFILE",
+  "java": "ActivityErrorEntry D001 -> ErrorArtifactExportService.exportActivityErrors, errfile-<CCYYMMDD>.csv",
+  "topic": "Validation - Activity Extraction",
+  "rule": "For each of a producer's other contracts, the extract establishes whether that contract already has activity of its own for the day. Where it does, nothing further is written. Where it does not, a record is written under a maintenance transaction code so that the contract is still represented in the day's extract. A failure of the check is reported under D001.",
+  "cond": "SQLCODE = 0 (activity exists) vs SQLCODE = 100 (no activity row) vs OTHER (error)",
+  "thr": "No activity row writes a record carrying transaction code MI00MI",
+  "prog": "UTP27601"
+ },
+ "BR-382": {
+  "dest": "ERRFILE",
+  "java": "ActivityErrorEntry D001 -> ErrorArtifactExportService, errfile-detectchanges-<CCYYMMDD>.csv (NodeComparisonOutcome.SkippedInvalidNode / SkippedNodeNotFound / SkippedBuildFailure)",
+  "topic": "Validation - Extract Intake",
+  "rule": "An extract record must carry a node identifier. A record whose node identifier is absent or zero is reported under D001 and is carried no further.",
+  "cond": "NODE-ID-OUT = ZEROES",
+  "thr": "Zero or absent node identifier is refused",
+  "prog": "UTP27901"
+ },
+ "BR-383": {
+  "dest": "ERRFILE",
+  "java": "ActivityErrorEntry D002 -> ErrorArtifactExportService, errfile-detectchanges-<CCYYMMDD>.csv (NodeComparisonOutcome.SkippedInvalidNode / SkippedNodeNotFound / SkippedBuildFailure)",
+  "topic": "Validation - Extract Intake",
+  "rule": "An extract record must declare itself as either an organisation or a contract. A record whose node type is neither is reported under D002 and is carried no further.",
+  "cond": "NODE-TYP-CD NOT = 'O' AND 'C'",
+  "thr": "O for an organisation or C for a contract",
+  "prog": "UTP27901"
+ },
+ "BR-384": {
+  "dest": "ERRFILE",
+  "java": "ActivityErrorEntry D003 -> ErrorArtifactExportService, errfile-detectchanges-<CCYYMMDD>.csv (NodeComparisonOutcome.SkippedInvalidNode / SkippedNodeNotFound / SkippedBuildFailure)",
+  "topic": "Validation - Extract Intake",
+  "rule": "The node identifier carried on an extract record must exist on the node table, from which its node type is retrieved. A node that cannot be found is reported under D003 and the record is carried no further.",
+  "cond": "SQLCODE = 0 (found) vs SQLCODE NOT = 0",
+  "thr": "Found proceeds to the master record service; not found reports D003",
+  "prog": "UTP27901"
+ },
+ "BR-386": {
+  "dest": "ERRFILE",
+  "java": "ActivityErrorEntry D003 -> ErrorArtifactExportService, errfile-detectchanges-<CCYYMMDD>.csv (NodeComparisonOutcome.SkippedInvalidNode / SkippedNodeNotFound / SkippedBuildFailure)",
+  "topic": "Validation - Change Routing",
+  "rule": "A record is carried forward only where the master record service both approved it and returned a recognised record type. An organisation is routed to organisation processing and a contract to contract processing; anything else is reported under D003 and the record is dropped.",
+  "cond": "OVERALL-INDICATOR = 'Y' AND PROCESS-ID = 'O' or 'C'",
+  "thr": "Requires an affirmative indicator with record type O or C",
+  "prog": "UTP27901"
+ },
+ "BR-047": {
+  "dest": "LNAERROR",
+  "java": "LnaValidationErrorEntry via RecordOutcome.Rejected",
+  "topic": "Record Structure and Sequence",
+  "rule": "A producer profile record may only appear within a bundle that is establishing a new broker dealer; one arriving in any other bundle is refused",
+  "cond": "A producer profile record next in the file while the bundle is not marked as a new broker dealer bundle",
+  "thr": "",
+  "prog": "UTP27301"
+ },
+ "BR-248": {
+  "dest": "LNAERROR",
+  "java": "LnaValidationErrorEntry via RecordOutcome.Rejected - code assigned by the calling paragraph",
+  "topic": "Validation - Broker Dealer Standing",
+  "rule": "Whether a broker dealer exists is established by reading its node identifier from the contract table for the partner interface purpose. Where no row is found the record being validated is marked invalid.",
+  "cond": "SELECT NODE_ID FROM UTT_ALL_CNTR (PURPOSE_CD='ALLSTATE', ENTITY_TYPE_CD='BD')",
+  "thr": "PURPOSE_CD = ALLSTATE, ENTITY_TYPE_CD = BD",
+  "prog": "UTP27301"
+ },
+ "BR-249": {
+  "dest": "LNAERROR",
+  "java": "LnaValidationErrorEntry via RecordOutcome.Rejected - code assigned by the calling paragraph",
+  "topic": "Validation - Broker Dealer Standing",
+  "rule": "The organisation code, name and distribution channel carried on a broker dealer's record are read from the organisation table by way of the node relationship. Where the read fails, the record being validated is marked invalid.",
+  "cond": "SELECT ORG_CD, ORG_NAME, DIST_CH_CD via UTT_ALL_NODE_REL/UTT_ALL_ORG join",
+  "thr": "Join of UTT_ALL_NODE_REL and UTT_ALL_ORG",
+  "prog": "UTP27301"
+ },
+ "BR-014": {
+  "dest": "Report output (no error path)",
+  "java": "Names all six HR1 outputs rather than routing an error: CNTLRPT, LOADFILE, LNAERROR, NEWBD, ADBSKIP, ADBERROR - each written by FileIngestionOutputWriter into Day <cycleDate>/File <n> - <ARTIFACT>/",
+  "topic": "Business Outputs",
+  "rule": "The run produces six separate reports, each addressed to a different question, so that a reader is not required to separate concerns themselves",
+  "cond": "Throughout the run",
+  "thr": "Six output reports. The organisation and appointment services do not have reports of their own: each returns an indicator, an error code, a database code and a description to the driver, which records them in the error log under the name of the service that failed",
+  "prog": "UTP27301"
+ },
+ "BR-038": {
+  "dest": "Report output (no error path)",
+  "java": "Activity-log entries (ActivityLogEntry) carrying ORO0OR / ORO2OR - the input to the HR2 extract, not an error path",
+  "topic": "Appointment and Relationship",
+  "rule": "Every change the daily feed makes is recorded as an activity entry carrying a code that says what kind of change it was, and those entries are the sole basis on which the downstream cycle decides what to send onward",
+  "cond": "Any organisation or relationship created or amended",
+  "thr": "Six activity codes are produced: organisation created, organisation amended, appointment, termination, reappointment, and amendment of an existing relationship",
+  "prog": "UTP27101, UTP27201"
+ },
+ "BR-039": {
+  "dest": "Report output (no error path)",
+  "java": "Activity-log / extract marker code (TE00TE, RA00RA) - an output record, not an error",
+  "topic": "Appointment and Relationship",
+  "rule": "A producer moving from an active appointment to a terminated or inactive one is recorded as a termination, and a producer moving the other way is recorded as a reappointment; the distinction is drawn from the direction of the change, not from anything the partner states",
+  "cond": "The relationship status on the incoming record differing from the status already held",
+  "thr": "Three relationship statuses; two directions of change each with their own activity code",
+  "prog": "UTP27201"
+ },
+ "BR-040": {
+  "dest": "Report output (no error path)",
+  "java": "Activity-log / extract marker code (MI00MI) - an output record, not an error",
+  "topic": "Appointment and Relationship",
+  "rule": "A change to the dates of an existing appointment, without a change of status, is recorded as an amendment rather than as a termination or a reappointment",
+  "cond": "The relationship start or end date differing from that held, with the status unchanged",
+  "thr": "Both the start and the end date are compared",
+  "prog": "UTP27201"
+ },
+ "BR-049": {
+  "dest": "Report output (no error path)",
+  "java": "MI00MI marker entry on the extract file - an output record, not an error",
+  "topic": "Activity Extraction",
+  "rule": "Where a contract cannot be found for a subject, the item is still carried forward and classified as an amendment rather than being discarded",
+  "cond": "The contract lookup returning no row",
+  "thr": "One default activity code applied where no contract row exists",
+  "prog": "UTP27601"
+ },
+ "BR-057": {
+  "dest": "Report output (no error path)",
+  "java": "Activity-log / extract marker code (AP00AP) - an output record, not an error",
+  "topic": "Appointment and Relationship",
+  "rule": "Whether a contract already exists for the subject decides whether an appointment is created or an existing one amended",
+  "cond": "Every firm or producer presented for appointment",
+  "thr": "",
+  "prog": "UTP27201"
+ },
+ "BR-137": {
+  "dest": "Report output (no error path)",
+  "java": "MI00MI no-change marker entries on the extract - HrActivityExtractService.buildNoActivityMarkers. Not an error path",
+  "topic": "Activity Extraction",
+  "rule": "Where a producer has activity on one of its contracts, an entry recording no change is raised for each of that producer's other contracts that saw no activity, so the set of entries held for a producer stays complete",
+  "cond": "An individual producer with activity on at least one contract, and holding more than one",
+  "thr": "One entry per contract of the producer, whether or not that contract saw activity",
+  "prog": "UTP27601"
+ },
+ "BR-073": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Master Record Service",
+  "rule": "A call that does not name both the subject and what is to be built is refused before any work is done",
+  "cond": "The node identifier zero, or the process marker blank",
+  "thr": "Both parameters are mandatory; the refusal code is 0001",
+  "prog": "UTP27801"
+ },
+ "BR-077": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE), 0002 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Master Record Service",
+  "rule": "An organisation is recognised only where it is held for the partner, so an organisation of the wider business is not an organisation of this interface",
+  "cond": "Any organisation master record being built",
+  "thr": "The purpose code is the partner's own; not found reports 0001 and a database failure reports 0002",
+  "prog": "UTP27801"
+ },
+ "BR-079": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE), 0002 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Master Record Service",
+  "rule": "An organisation's standing is taken from one particular relationship, identified by a fixed purpose and a fixed type",
+  "cond": "Any organisation master record being built",
+  "thr": "Purpose 'LNA' and relationship type '01'. Not found and a duplicate row both report 0001; another failure reports 0002",
+  "prog": "UTP27801"
+ },
+ "BR-090": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE), 0002 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Master Record Service",
+  "rule": "An appointment master record begins from the contract held for the subject, and the contract is what establishes what kind of party the subject is",
+  "cond": "Any appointment master record being built",
+  "thr": "Seven values are taken from one read; not found reports 0001 and a database failure 0002",
+  "prog": "UTP27801"
+ },
+ "BR-093": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE), 0002 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Master Record Service",
+  "rule": "A firm carries its own tax number, name and regulatory number, and never carries the personal detail of an individual",
+  "cond": "A broker dealer, legal entity or hierarchy agency master record being built",
+  "thr": "Four values taken; three name fields blanked and three date-of-birth fields zeroed",
+  "prog": "UTP27801"
+ },
+ "BR-099": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE), 0002 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Appointment and Relationship",
+  "rule": "The party standing above a producer or an agency must itself hold a contract, and its kind and contract number are read before the climb continues",
+  "cond": "A hierarchy agency or an individual producer master record being built",
+  "thr": "Two values taken; not found reports 0001 and a database failure 0002",
+  "prog": "UTP27801"
+ },
+ "BR-113": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE), 0002 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Master Record Service",
+  "rule": "An individual producer's personal detail is taken from the person record, and the record must exist",
+  "cond": "An individual producer master record being built",
+  "thr": "Nineteen values taken from one read; not found reports 0001 and a database failure 0002",
+  "prog": "UTP27801"
+ },
+ "BR-115": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE), 0002 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Exception Handling",
+  "rule": "The service refuses in only two ways, and reports which by a two-value code",
+  "cond": "Any read the service performs",
+  "thr": "Two codes: not found and database failure. The description carries the table name",
+  "prog": "UTP27801"
+ },
+ "BR-441": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (VALIDATION_FAILURE) returned to UTP27901, which records it as D003 in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Validation - Record Routing",
+  "rule": "The master record service refuses the call unless it is given both a node identifier and a record type. A zero node identifier or a blank record type is reported to the caller as an input failure and no master record is built.",
+  "cond": "NODE-ID OF WS-UTP27801-INPUT = ZEROES OR PROCESS-ID OF WS-UTP27801-INPUT = SPACES",
+  "thr": "Both mandatory; reported as 0001",
+  "prog": "UTP27801"
+ },
+ "BR-457": {
+  "dest": "Returned status \u2192 ERRFILE",
+  "java": "RecordBuildResult 0001 (DATA_INCONSISTENCY) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv",
+  "topic": "Validation - Table Integrity",
+  "rule": "A hierarchy agency or individual producer may sit beneath a legal entity which itself sits beneath a broker dealer. Where the parent is a legal entity, the chain is walked with an additional hop before the organisation is reached. A contract that cannot be found anywhere along the chain is reported to the caller.",
+  "cond": "IF WS-PARENT-ENTITY = 'LLE' perform extra REL_TYPE_CD='02' hop before the '01' org hop; contract lookup EVALUATE SQLCODE WHEN 0/100/OTHER",
+  "thr": "An additional relationship hop of type 02 precedes the organisation hop of type 01; failures reported as 0001 or 0002",
+  "prog": "UTP27801"
+ },
+ "BR-071": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY); UTP27301 writes the LNAERROR row only (only 0003 also writes ADBERROR)",
+  "topic": "Appointment and Relationship",
+  "rule": "Whether a contract is required for a producer is decided by whether outside-business compliance detail is already held for it, not by anything the partner sends",
+  "cond": "Any producer presented for appointment",
+  "thr": "The outside-business record carries the private office audit date, the private office review date, the compliance meeting date, a free-text comment, an unaligned client marker and an offshore mutual fund marker",
+  "prog": "UTP27201"
+ },
+ "BR-254": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0001 (VALIDATION_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Called Service Outcome",
+  "rule": "The organisation service refuses the call unless all five required input fields are supplied. Any one of them arriving as spaces or low-values is reported to the caller as an input failure and no processing takes place.",
+  "cond": "Reject if any of these 5 required input fields = SPACES OR LOW-VALUES",
+  "thr": "All five mandatory: firm name, purpose, distribution channel, line of business, broker dealer identifier. Reported as 0001",
+  "prog": "UTP27101"
+ },
+ "BR-255": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0001 (VALIDATION_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Called Service Outcome",
+  "rule": "Where the caller asks the organisation service not to generate organisation initials, the caller must supply them. A request to suppress generation accompanied by blank initials is reported to the caller as an input failure.",
+  "cond": "Reject if caller flags \"not auto-generate initials\" (SW='N') but supplies blank WSI-ORG-INITIALS",
+  "thr": "WSI-NEW-ORG-INITIALS-SW = N requires WSI-ORG-INITIALS to be populated. Reported as 0001",
+  "prog": "UTP27101"
+ },
+ "BR-289": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0001 (VALIDATION_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR only (UTP27201's 0003 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Record Routing",
+  "rule": "The appointment service must be told whether the subject of the call is a person or a firm. Only F for a firm and P for a person are recognised; any other value is reported to the caller as an input failure.",
+  "cond": "Routes processing by person/firm indicator; only 'F' or 'P' are valid",
+  "thr": "F (firm) or P (person); reported as 0001",
+  "prog": "UTP27201"
+ },
+ "BR-301": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on AppointmentResult; UTP27301 writes P2721 to LNAERROR only (UTP27201's 0003 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Contract and Subject Existence",
+  "rule": "A generated contract number must not already be in use. The candidate is checked and one already held drives the generator to the next candidate. A failure of the check itself stops the service.",
+  "cond": "Checks whether a generated contract number already exists so the generator can loop to the next candidate",
+  "thr": "Row found drives a retry; no row means the number is free; failure reported as 0002",
+  "prog": "UTP27201"
+ },
+ "BR-309": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0001 (VALIDATION_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR only (UTP27201's 0003 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Appointment Consistency",
+  "rule": "Where a producer's relationship does not yet exist, only a current profile may establish one. A history profile arriving with no relationship to attach to is reported to the caller as an input failure.",
+  "cond": "If the IP relationship does NOT exist, only profile type 'C' may insert a brand-new profile; 'H' with no existing relationship is invalid",
+  "thr": "Profile type must be C; H with no existing relationship is reported as 0001",
+  "prog": "UTP27201"
+ },
+ "BR-361": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on AppointmentResult; UTP27301 writes P2721 to LNAERROR only (UTP27201's 0003 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Table Integrity",
+  "rule": "The control row holding the last contract number issued must be readable. Where the fetch fails, the appointment service stops and reports the failure to the caller.",
+  "cond": "Guards fetch of last-used contract number control row",
+  "thr": "Failure reported as 0002",
+  "prog": "UTP27201"
+ },
+ "BR-362": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on AppointmentResult; UTP27301 writes P2721 to LNAERROR only (UTP27201's 0003 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Table Integrity",
+  "rule": "The control row must be updated with the contract number just issued, so that the same number is not issued twice. Where the update fails, the appointment service stops and reports the failure to the caller.",
+  "cond": "Guards update of contract-number control row",
+  "thr": "Failure reported as 0002",
+  "prog": "UTP27201"
+ },
+ "BR-370": {
+  "dest": "Returned status \u2192 LNAERROR",
+  "java": "OperationStatus 0001 (VALIDATION_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR only (UTP27201's 0003 is the only code that also writes ADBERROR)",
+  "topic": "Validation - Called Service Outcome",
+  "rule": "An unrecognised person or firm indicator, an unrecognised entity type, or a failed required-field check are all reported to the caller under one input-failure code, without distinguishing which of them occurred.",
+  "cond": "Generic catch-all for invalid person/firm indicator, invalid entity type, or failed required-field validation",
+  "thr": "Indicator N with code 0001 for all three conditions",
+  "prog": "UTP27201"
+ },
+ "BR-141": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "Refused as inconsistent with what is held - OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult. UTP27301 writes O2711 to LNAERROR, and ADBERROR too, since 0002 is UTP27101's ADBERROR-triggering code",
+  "topic": "Organisation Creation",
+  "rule": "A record whose channel and line of business do not match those held for an organisation already established is refused rather than treated as an amendment to it; a change of name is the only amendment the organisation accepts",
+  "cond": "A firm presented for an organisation that already exists",
+  "thr": "A four-field comparison against the established organisation; only the name is amendable",
+  "prog": "UTP27101"
+ },
+ "BR-258": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Table Integrity",
+  "rule": "More than one contract row for the same partner identifier and entity type is a data integrity failure. The organisation service stops and reports to the caller that the contract table holds multiple records for one combination.",
+  "cond": "SQLCODE -811 (duplicate rows for same ALLSTATE-ID/ENTITY-TYPE-CD)",
+  "thr": "SQLCODE -811; reported as 0002",
+  "prog": "UTP27101"
+ },
+ "BR-262": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Table Integrity",
+  "rule": "More than one relationship row for the same child node is a data integrity failure. The organisation service stops and reports that the node relationship table holds multiple records for one child node.",
+  "cond": "SQLCODE -811 (duplicate relationship rows for same CHLD_NODE_ID)",
+  "thr": "SQLCODE -811; reported as 0002",
+  "prog": "UTP27101"
+ },
+ "BR-265": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Table Integrity",
+  "rule": "Where no organisation row exists for the parent node and purpose, the organisation service stops and reports to the caller. The message it emits names a duplicate-record condition rather than a missing one, which does not describe the case being handled.",
+  "cond": "SQLCODE 100 (no row) - text mislabeled \"MULTIPLE RECORDS\", appears to be a copy/paste bug carried from the -811 case",
+  "thr": "SQLCODE 100; reported as 0002. The message text does not match the condition",
+  "prog": "UTP27101"
+ },
+ "BR-266": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Table Integrity",
+  "rule": "Any other database failure on the organisation detail lookup stops the organisation service, which reports the fetch failure to the caller. This lookup draws no distinction between a duplicate-row condition and any other error.",
+  "cond": "Any other SQLCODE (no distinct -811 handling here)",
+  "thr": "Reported as 0002 with the SQLCODE returned",
+  "prog": "UTP27101"
+ },
+ "BR-267": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Organisation Consistency",
+  "rule": "Once an organisation exists, its four classification attributes are fixed. Where the purpose, distribution channel, line of business or initials supplied by the caller differ from those already stored against the node, the update is refused and reported to the caller.",
+  "cond": "Reject if any of these 4 caller-supplied classification fields differ from the existing UTT_ALL_ORG row for this node",
+  "thr": "Purpose, distribution channel, line of business and initials are immutable once the organisation exists. Reported as 0002",
+  "prog": "UTP27101"
+ },
+ "BR-275": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Identifier Generation",
+  "rule": "Every character of a generated office code must be either a letter or a digit. A code containing any other character is refused and reported to the caller.",
+  "cond": "Reject if any of the 5 fetched office-code characters is neither alphabetic nor numeric",
+  "thr": "All five positions alphabetic or numeric; reported as 0002",
+  "prog": "UTP27101"
+ },
+ "BR-276": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Identifier Generation",
+  "rule": "No character position of a generated office code may be a space. A code containing a space is refused and reported to the caller.",
+  "cond": "Reject if any character position of the fetched office code is a space",
+  "thr": "No spaces in any of the five positions; reported as 0002",
+  "prog": "UTP27101"
+ },
+ "BR-280": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Identifier Generation",
+  "rule": "Every character of a generated set of organisation initials must be either a letter or a digit. Initials containing any other character are refused and reported to the caller.",
+  "cond": "Reject if any of the 3 fetched initials characters is neither alphabetic nor numeric",
+  "thr": "All three positions alphabetic or numeric; reported as 0002",
+  "prog": "UTP27101"
+ },
+ "BR-281": {
+  "dest": "Returned status \u2192 LNAERROR + ADBERROR",
+  "java": "OperationStatus 0002 (DATA_INCONSISTENCY) on OrganizationResult; UTP27301 writes O2711 to LNAERROR, and ADBERROR too because UTP27101's 0002 triggers it",
+  "topic": "Validation - Identifier Generation",
+  "rule": "No character position of a generated set of organisation initials may be a space. Initials containing a space are refused and reported to the caller.",
+  "cond": "Reject if any character position of the fetched initials is a space",
+  "thr": "No spaces in any of the three positions; reported as 0002",
+  "prog": "UTP27101"
+ }
+}

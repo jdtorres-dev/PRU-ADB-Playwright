@@ -1,0 +1,1024 @@
+{
+ "BR-009": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "Producer record carrying a sub-type that is neither of the two recognised values.",
+  "how": "Set the record type/sub-type to D03 on an otherwise valid producer record.",
+  "expected": "ADBSKIP entry with SkipReasonCode 001 INVALID_RECORD_TYPE. No LNAERROR row."
+ },
+ "BR-015": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "Any refusal on the contra header suppresses the whole bundle beneath it.",
+  "how": "Blank the firm name on the B record (a known refusal), then let the bundle's C, D01, D02 follow normally.",
+  "expected": "Every record drained to the next contra header appears on ADBSKIP with SkipReasonCode 002 EARLIER_BUNDLE_RECORD_FAILED."
+ },
+ "BR-038": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "Any organisation or relationship created or amended produces an activity entry.",
+  "how": "A valid bundle that creates a new organisation. No fault needed.",
+  "expected": "ActivityLogEntry carrying ORO0OR on the extract. Assert the entry exists, not an error."
+ },
+ "BR-047": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "A producer profile record arrives next while the bundle is not marked as a new broker dealer bundle.",
+  "how": "Present a D02 immediately after the contra header, with no firm entity record.",
+  "expected": "LnaValidationErrorEntry via RecordOutcome.Rejected - the record is refused to LNAERROR."
+ },
+ "BR-057": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "Every firm or producer presented for appointment produces an appointment marker.",
+  "how": "A valid bundle carrying a producer profile. No fault needed.",
+  "expected": "Activity marker AP00AP on the extract."
+ },
+ "BR-169": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "Record whose type/sub-type is outside B, C, D01, D02, Z.",
+  "how": "Insert a record whose first position is X inside an otherwise valid bundle.",
+  "expected": "ADBSKIP entry, SkipReasonCode 001. No LNAERROR row."
+ },
+ "BR-172": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "A producer profile is expected but a producer entity record arrives instead.",
+  "how": "Repeat the D01 record where the D02 belongs.",
+  "expected": "ADBSKIP entry, SkipReasonCode 001. No LNAERROR row."
+ },
+ "BR-309": {
+  "group": "E",
+  "tier": "T1",
+  "condition": "Profile type H presented where no investment professional relationship exists.",
+  "how": "Set the profile type to H on a producer profile carrying identifiers never presented before - no relationship can exist for them.",
+  "expected": "OperationStatus 0001 VALIDATION_FAILURE on AppointmentResult; P2721 written to LNAERROR."
+ },
+ "BR-165": {
+  "group": "E",
+  "tier": "T1H",
+  "condition": "The company name on the submitting header does not match the name supplied to the job.",
+  "how": "A single-rule file whose header carries a different company name.",
+  "expected": "ControlReport.forHeaderValidationFailure(company), then InterfaceValidationException. No records processed."
+ },
+ "BR-166": {
+  "group": "E",
+  "tier": "T1H",
+  "condition": "The transmission date on the header does not equal the cycle date.",
+  "how": "A single-rule file whose header transmission date differs from the Feed Date set in the console. Only compared when the date check is switched on.",
+  "expected": "ControlReport.forHeaderValidationFailure(date), then InterfaceValidationException."
+ },
+ "BR-167": {
+  "group": "E",
+  "tier": "T1H",
+  "condition": "The record count declared on the header does not match the external count.",
+  "how": "A single-rule file whose header count is deliberately one too many.",
+  "expected": "ControlReport.forHeaderValidationFailure(count), then InterfaceValidationException."
+ },
+ "BR-014": {
+  "group": "E",
+  "tier": "T1A",
+  "condition": "Throughout the run, six outputs are produced.",
+  "how": "No new data. Assert against any completed run.",
+  "expected": "All six HR1 artifacts present in the download: CNTLRPT, LOADFILE, LNAERROR, NEWBD, ADBSKIP, ADBERROR."
+ },
+ "BR-039": {
+  "group": "E",
+  "tier": "T2",
+  "condition": "The relationship status on the incoming record differs from the status held.",
+  "how": "Commit a profile as active, then re-present it as terminated.",
+  "expected": "Activity marker TE00TE (termination) or RA00RA (reappointment) on the extract."
+ },
+ "BR-040": {
+  "group": "E",
+  "tier": "T2",
+  "condition": "The relationship start or end date differs from that held, status unchanged.",
+  "how": "Commit a profile, then re-present it with a different start date.",
+  "expected": "Activity marker MI00MI on the extract."
+ },
+ "BR-137": {
+  "group": "E",
+  "tier": "T2",
+  "condition": "A producer with activity on one contract and holding more than one.",
+  "how": "Commit a producer against two firms, then present activity on one of them.",
+  "expected": "MI00MI no-change marker entries for the untouched contract (HrActivityExtractService.buildNoActivityMarkers)."
+ },
+ "BR-141": {
+  "group": "E",
+  "tier": "T2",
+  "condition": "A firm is presented for an organisation that already exists.",
+  "how": "Upload a bundle, let it commit, then present the same identifiers again.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY on OrganizationResult; O2711 to LNAERROR and a row on ADBERROR."
+ },
+ "BR-267": {
+  "group": "E",
+  "tier": "T2",
+  "condition": "A caller-supplied classification field differs from the organisation row already held.",
+  "how": "Commit a bundle, then re-present the same organisation with a different firm type.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 to LNAERROR and ADBERROR."
+ },
+ "BR-301": {
+  "group": "E",
+  "tier": "T2",
+  "condition": "A generated contract number already exists, so the generator loops.",
+  "how": "Commit enough contracts to force a collision. Depends on the generator's sequence, so confirm the algorithm before planning this.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY on AppointmentResult; P2721 to LNAERROR."
+ },
+ "BR-010": {
+  "group": "C",
+  "tier": "ASSERT",
+  "condition": "Any record failing validation",
+  "how": "The rule governs the content of a row another test already produces, not whether one is written.",
+  "expected": "Governs the content of the LNAERROR row, not whether one is written - LnaValidationErrorEntry carries record type, tax id, partner id, entity type, person/firm marker, owning BD and org code"
+ },
+ "BR-011": {
+  "group": "C",
+  "tier": "ASSERT",
+  "condition": "Any record failing validation",
+  "how": "The rule governs the content of a row another test already produces, not whether one is written.",
+  "expected": "Governs the LNAERROR row's description column - the code's text is looked up from the error_code table (V7__error_code_seed.sql, pinned to docs/ALLSTATE_ERROR_CD.TXT)"
+ },
+ "BR-066": {
+  "group": "C",
+  "tier": "ASSERT",
+  "condition": "Any refusal being written to the partner error report",
+  "how": "The rule governs the content of a row another test already produces, not whether one is written.",
+  "expected": "Governs an LNAERROR column: the distribution channel is resolved to its business name for the row. Where the lookup fails the row carries the failure rather than a blank"
+ },
+ "BR-130": {
+  "group": "C",
+  "tier": "ASSERT",
+  "condition": "A record written to the skip report",
+  "how": "The rule governs the content of a row another test already produces, not whether one is written.",
+  "expected": "Governs the ADBSKIP entry's content - SkippedRecordEntry carries the reason plus the raw 600-byte input record in full, not a reference to it"
+ },
+ "BR-065": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Any coded field validated, including every state on every address",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared code-decode lookup. The lookup itself writes nothing - the calling edit emits the LNAERROR row under its own code (ReferenceCodeSets)"
+ },
+ "BR-237": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Rejects 111111111, 000000000, 999999999; all 9 positions must be numeric",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-238": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Keyed read of VSAMTABL against table UTTSTA01; sets 88-level VALID-STATE",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-239": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Accepts 5-digit ZIP or ZIP+4 (NNNNN-NNNN, first 5 <> 00000)",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-240": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "If non-blank, all 10 positions must be numeric",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-241": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Calls TRCSMALL (function U002) for century conversion",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-242": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Calls TRCSMALL (function C101); term date must not precede effective date",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-243": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Calls TRCSMALL (function C101); day-difference must be >= 5,844 (~16 years)",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-244": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "First character must be alphabetic and not a space",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-245": {
+  "group": "B",
+  "tier": "PROXY",
+  "condition": "Rejects leading space, or a name that is effectively 1 character",
+  "how": "The Java says the routine writes nothing of its own; the calling edit emits the row under its own code. It therefore runs inside every calling rule's test.",
+  "expected": "Shared edit routine - sets the validity flag only; the calling paragraph emits the LNAERROR row and assigns the error code"
+ },
+ "BR-017": {
+  "group": "D",
+  "tier": "OBSERVE",
+  "condition": "Any firm entity validation failure",
+  "how": "BRD v4 marks the rule Confidence C: the source contradicts itself, so no expected result can be stated.",
+  "expected": "Contradiction: the same business check reports under a B06xx code on a first firm and a C07xx code on a subsequent firm. Both rows land in LNAERROR, under different codes"
+ },
+ "BR-004": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "The date-check indicator set to the negative value",
+  "how": "The condition is a job parameter, not a field on the feed file. The console does not expose it.",
+  "expected": "Control-report line only."
+ },
+ "BR-049": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "The contract lookup returning no row",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-071": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Any producer presented for appointment",
+  "how": "The condition is a specific SQL state (duplicate rows, control-row contention). It needs the database put into that state deliberately.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 or P2721 to LNAERROR."
+ },
+ "BR-073": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "The node identifier zero, or the process marker blank",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-077": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Any organisation master record being built",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-079": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Any organisation master record being built",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-090": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Any appointment master record being built",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-093": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "A broker dealer, legal entity or hierarchy agency master record being built",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-099": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "A hierarchy agency or an individual producer master record being built",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-113": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "An individual producer master record being built",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-115": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Any read the service performs",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-248": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SELECT NODE_ID FROM UTT_ALL_CNTR (PURPOSE_CD='ALLSTATE', ENTITY_TYPE_CD='BD')",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-249": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SELECT ORG_CD, ORG_NAME, DIST_CH_CD via UTT_ALL_NODE_REL/UTT_ALL_ORG join",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-254": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Reject if any of these 5 required input fields = SPACES OR LOW-VALUES",
+  "how": "The field is not on the LNA input layout - it is derived inside the service. And where a comparable field is on the layout, the LNA edit refuses the record first, so the service-level rule is never reached.",
+  "expected": "OperationStatus 0001 VALIDATION_FAILURE; O2711 or P2721 to LNAERROR - not reachable from a feed file."
+ },
+ "BR-255": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Reject if caller flags \"not auto-generate initials\" (SW='N') but supplies blank WSI-ORG-INITIALS",
+  "how": "The condition is a malformed value on a reference table the service reads. It is not carried on the input record.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 to LNAERROR and ADBERROR."
+ },
+ "BR-258": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SQLCODE -811 (duplicate rows for same ALLSTATE-ID/ENTITY-TYPE-CD)",
+  "how": "The condition is a specific SQL state (duplicate rows, control-row contention). It needs the database put into that state deliberately.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 or P2721 to LNAERROR."
+ },
+ "BR-262": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SQLCODE -811 (duplicate relationship rows for same CHLD_NODE_ID)",
+  "how": "The condition is a specific SQL state (duplicate rows, control-row contention). It needs the database put into that state deliberately.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 or P2721 to LNAERROR."
+ },
+ "BR-265": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SQLCODE 100 (no row) - text mislabeled \"MULTIPLE RECORDS\", appears to be a copy/paste bug carried from the -811 case",
+  "how": "The condition is a specific SQL state (duplicate rows, control-row contention). It needs the database put into that state deliberately.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 or P2721 to LNAERROR."
+ },
+ "BR-266": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Any other SQLCODE (no distinct -811 handling here)",
+  "how": "The condition is a specific SQL state (duplicate rows, control-row contention). It needs the database put into that state deliberately.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 or P2721 to LNAERROR."
+ },
+ "BR-275": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Reject if any of the 5 fetched office-code characters is neither alphabetic nor numeric",
+  "how": "The condition is a malformed value on a reference table the service reads. It is not carried on the input record.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 to LNAERROR and ADBERROR."
+ },
+ "BR-276": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Reject if any character position of the fetched office code is a space",
+  "how": "The condition is a malformed value on a reference table the service reads. It is not carried on the input record.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 to LNAERROR and ADBERROR."
+ },
+ "BR-280": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Reject if any of the 3 fetched initials characters is neither alphabetic nor numeric",
+  "how": "The condition is a malformed value on a reference table the service reads. It is not carried on the input record.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 to LNAERROR and ADBERROR."
+ },
+ "BR-281": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Reject if any character position of the fetched initials is a space",
+  "how": "The condition is a malformed value on a reference table the service reads. It is not carried on the input record.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 to LNAERROR and ADBERROR."
+ },
+ "BR-289": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Routes processing by person/firm indicator; only 'F' or 'P' are valid",
+  "how": "The field is not on the LNA input layout - it is derived inside the service. And where a comparable field is on the layout, the LNA edit refuses the record first, so the service-level rule is never reached.",
+  "expected": "OperationStatus 0001 VALIDATION_FAILURE; O2711 or P2721 to LNAERROR - not reachable from a feed file."
+ },
+ "BR-361": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Guards fetch of last-used contract number control row",
+  "how": "The condition is a specific SQL state (duplicate rows, control-row contention). It needs the database put into that state deliberately.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 or P2721 to LNAERROR."
+ },
+ "BR-362": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Guards update of contract-number control row",
+  "how": "The condition is a specific SQL state (duplicate rows, control-row contention). It needs the database put into that state deliberately.",
+  "expected": "OperationStatus 0002 DATA_INCONSISTENCY; O2711 or P2721 to LNAERROR."
+ },
+ "BR-370": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "Generic catch-all for invalid person/firm indicator, invalid entity type, or failed required-field validation",
+  "how": "The field is not on the LNA input layout - it is derived inside the service. And where a comparable field is on the layout, the LNA edit refuses the record first, so the service-level rule is never reached.",
+  "expected": "OperationStatus 0001 VALIDATION_FAILURE; O2711 or P2721 to LNAERROR - not reachable from a feed file."
+ },
+ "BR-374": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SQLCODE = 0 (found) vs SQLCODE NOT = 0 (not found/error)",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-375": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SQLCODE = 0 (found) vs SQLCODE NOT = 0",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-378": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SQLCODE = 0 (activity exists) vs SQLCODE = 100 (no activity row) vs OTHER (error)",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-382": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "NODE-ID-OUT = ZEROES",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-383": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "NODE-TYP-CD NOT = 'O' AND 'C'",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-384": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "SQLCODE = 0 (found) vs SQLCODE NOT = 0",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-386": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "OVERALL-INDICATOR = 'Y' AND PROCESS-ID = 'O' or 'C'",
+  "how": "The input to this stage is the activity extract, not the LNA feed we upload. Reaching it means driving the extract stage, which the console does not expose.",
+  "expected": "ActivityErrorEntry on errfile-detectchanges-<CCYYMMDD>.csv."
+ },
+ "BR-441": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "NODE-ID OF WS-UTP27801-INPUT = ZEROES OR PROCESS-ID OF WS-UTP27801-INPUT = SPACES",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-457": {
+  "group": "E",
+  "tier": "T3",
+  "condition": "IF WS-PARENT-ENTITY = 'LLE' perform extra REL_TYPE_CD='02' hop before the '01' org hop; contract lookup EVALUATE SQLCODE WHEN 0/100/OTHER",
+  "how": "The condition is a database read returning no row. A feed file cannot remove a row that the service expects to find.",
+  "expected": "RecordBuildResult 0001 / 0002 returned to UTP27901, recorded as D003 on the error file."
+ },
+ "BR-036": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "A new broker dealer firm accepted by the driver",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE); UTP27301 writes the LNAERROR row only (only 0002 also writes ADBERROR)"
+ },
+ "BR-037": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Any new organisation or person",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE); UTP27301 writes the LNAERROR row only (only 0002 also writes ADBERROR)"
+ },
+ "BR-042": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Any failure inside the organisation or appointment service",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "The general service-return contract: OperationStatus (NONE / VALIDATION_FAILURE / DATA_INCONSISTENCY / SQL_FAILURE) returned on OrganizationResult and AppointmentResult. The driver writes O2711 or P2721 to LNAERROR for every failure, and ADBERROR only for UTP27101's 0002 or UTP27201's 0003"
+ },
+ "BR-067": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Any appointment status being applied",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE); UTP27301 writes the LNAERROR row, and ADBERROR too because 0003 is UTP27201's ADBERROR-triggering code"
+ },
+ "BR-259": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Any other SQLCODE (DB error)",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-263": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Any other SQLCODE",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-270": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "UPDATE statement result",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-271": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "INSERT statement result",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-272": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "INSERT statement result",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-274": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "SELECT current office-code control row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-277": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "SELECT ORG_SUBJ_ID WHERE ORG_NAME = candidate office code - duplicate-code check",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-278": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "UPDATE control row with newly generated office code",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-279": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "SELECT current agent-initials control row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-282": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "SELECT ORG_SUBJ_ID WHERE ORG_NAME = candidate initials - duplicate-initials check",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-283": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "UPDATE control row with newly generated initials",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-284": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "SELECT SUBJ_ID (next node-id seed)",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-285": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "UPDATE control row with incremented node-id",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-286": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "INSERT new node row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-287": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "SELECT current subject-id control row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-288": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "UPDATE control row with incremented subject-id",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on OrganizationResult; UTP27301 writes O2711 to LNAERROR only (UTP27101's 0002 is the only code that also writes ADBERROR)"
+ },
+ "BR-296": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Duplicate-row guard: more than one contract row for the same ALLSTATE-ID/entity-type combination is a data-integrity violation",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-297": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Confirms parent BD contract exists before creating LLE/HA/IP child relationship",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-298": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Determines whether child entity contract already exists (LLE/HA/IP); SQLCODE 0 or -811 treated as found, 100=not found",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-299": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Looks up BD node id for an LLE/HA/Person under an LLE; multiple rows are an error",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-300": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Confirms the specific LLE row (joined to BD via node-rel) exists uniquely",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-302": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Determines whether a parent-child relationship (BD->LLE, BD/LLE->HA, BD/LLE->IP) already exists in UTT_ALL_NODE_REL",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-303": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Fetches existing node-relationship row to decide update path",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-310": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Determines whether the same person subj-id is linked to other Allstate contracts besides the one being processed (SSN shared across contracts)",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-311": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Checks whether a contract/subj-id already exists for this person's Allstate ID before generating a new subject id",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-312": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Checks whether a person profile already exists by SSN (fallback when no contract found by Allstate ID), to avoid creating a duplicate person",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-314": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Locates the existing IP contract's current subj-id to detect a duplicate-SSN situation",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-315": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "More than one person row found for the incoming tax identifier, which is treated as unrecoverable, unlike duplicate rows on the contract lookup which are tolerated",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-323": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Determines whether an address row already exists for this contract/SSN + address type",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-330": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards the ORG_NAME sync update",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-331": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards contract-history insert prior to updating current contract",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-332": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards contract attribute update",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-333": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards fetch of current firm row before compare",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-334": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards firm attribute update",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-335": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards address update",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-336": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards address delete (when home address blanked out)",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-337": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards re-keying home address row when a person's SSN changes",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-338": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards new address insert",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-339": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards relationship-history insert prior to updating current relationship",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-340": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards existence check used by the 5000-PERS-PROCESS-PARA history-only path",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-341": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards update of the special history row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-342": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards insert of the special history row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-343": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards relationship attribute update",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-344": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards new relationship insert",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-345": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards new contract insert",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-346": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards new firm insert",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-347": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards new person insert",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-348": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards fetch of current person row before compare",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-349": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards person attribute update",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-350": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards output-record enrichment fetch for BD/LLE/IP parent details",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-351": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards output-record fetch of BD node id for Org lookup",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-352": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards output-record fetch of Org code/name",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-353": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards distribution-channel description lookup for output",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-354": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards relationship-status description lookup for output",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-355": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards every activity-log insert",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-356": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards fetch of node-id control row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-357": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards update of node-id control row with next value",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-358": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards insert of newly generated node id",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-359": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards fetch of subject-id control row",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-360": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards update of subject-id control row with next value",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-363": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards fetch of prior SSN during duplicate-SSN fix",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-364": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards removal of the superseded person row after SSN repatch",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-365": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards repointing the IP contract to the correct subj-id",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-366": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards repointing contract history to the correct subj-id",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-367": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards removal of the home address tied to the superseded SSN when no other contracts remain",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-368": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "Guards repointing business address rows to the correct subj-id across all of the person's contracts",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "OperationStatus 0003 (SQL_FAILURE) on AppointmentResult; UTP27301 writes P2721 to LNAERROR, and ADBERROR too because UTP27201's 0003 triggers it"
+ },
+ "BR-444": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "EVALUATE SQLCODE WHEN 0 (found) / WHEN 100 (not found) / WHEN OTHER",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "RecordBuildResult 0001 (DATA_INCONSISTENCY), 0002 (SQL_FAILURE) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv"
+ },
+ "BR-445": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "EVALUATE SQLCODE WHEN 0 / WHEN 100 / WHEN -811 / WHEN OTHER",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "RecordBuildResult 0001 (DATA_INCONSISTENCY), 0002 (SQL_FAILURE) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv"
+ },
+ "BR-449": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "EVALUATE SQLCODE WHEN 0 / 100 / OTHER",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "RecordBuildResult 0001 (DATA_INCONSISTENCY), 0002 (SQL_FAILURE) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv"
+ },
+ "BR-452": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "EVALUATE SQLCODE WHEN 0 / 100 / OTHER",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "RecordBuildResult 0001 (DATA_INCONSISTENCY), 0002 (SQL_FAILURE) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv"
+ },
+ "BR-453": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "EVALUATE SQLCODE WHEN 0 / 100 / OTHER",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "RecordBuildResult 0001 (DATA_INCONSISTENCY), 0002 (SQL_FAILURE) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv"
+ },
+ "BR-456": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "EVALUATE SQLCODE WHEN 0 / 100 / OTHER",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "RecordBuildResult 0001 (DATA_INCONSISTENCY), 0002 (SQL_FAILURE) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv"
+ },
+ "BR-458": {
+  "group": "A",
+  "tier": "CONFIRM",
+  "condition": "EVALUATE SQLCODE WHEN 0 / 100 / OTHER",
+  "how": "The column describes this as OperationStatus 0003 SQL_FAILURE and names a COBOL program. The modernised process has no SQL, so the wording is carried from the legacy analysis rather than describing Java behaviour. 77 of 77 such rows cite a COBOL program name; only 1 of the 12 rows that could actually be built does. The described error path may not exist in the modernised system at all.",
+  "expected": "RecordBuildResult 0001 (DATA_INCONSISTENCY), 0002 (SQL_FAILURE) returned to UTP27901, which records it as D003 (SkippedBuildFailure) in errfile-detectchanges-<CCYYMMDD>.csv"
+ }
+}

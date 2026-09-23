@@ -1,0 +1,14 @@
+node_modules/
+.env
+
+# Playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/
+
+# Generated at runtime - execution results, downloaded artifacts, verdicts, reports
+/artifacts/
+
+# Build output
+*.tsbuildinfo
+dist/

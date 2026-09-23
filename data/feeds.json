@@ -1,0 +1,1309 @@
+[
+ {
+  "file": "ALLSTATE.LNA.SETUP-B0700-COMMIT-BD.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.SETUP-B0700-COMMIT-BD.D20260908.txt",
+  "family": "setup",
+  "code": "",
+  "destination": "",
+  "phase": 0,
+  "records": 6,
+  "bundles": 1,
+  "cases": []
+ },
+ {
+  "file": "ALLSTATE.LNA.B0100.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0100.D20260908.txt",
+  "family": "error-code",
+  "code": "B0100",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-174"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0200.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0200.D20260908.txt",
+  "family": "error-code",
+  "code": "B0200",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-175"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0300.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0300.D20260908.txt",
+  "family": "error-code",
+  "code": "B0300",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-176"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0400.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0400.D20260908.txt",
+  "family": "error-code",
+  "code": "B0400",
+  "destination": "",
+  "phase": 1,
+  "records": 9,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-170",
+   "TC-BR-173"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0500.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0500.D20260908.txt",
+  "family": "error-code",
+  "code": "B0500",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-178"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0601.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0601.D20260908.txt",
+  "family": "error-code",
+  "code": "B0601",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-179"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0602.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0602.D20260908.txt",
+  "family": "error-code",
+  "code": "B0602",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-180"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0604.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0604.D20260908.txt",
+  "family": "error-code",
+  "code": "B0604",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-181"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0605.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0605.D20260908.txt",
+  "family": "error-code",
+  "code": "B0605",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-182"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0606.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0606.D20260908.txt",
+  "family": "error-code",
+  "code": "B0606",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-183"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0607.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0607.D20260908.txt",
+  "family": "error-code",
+  "code": "B0607",
+  "destination": "",
+  "phase": 1,
+  "records": 11,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-018",
+   "TC-BR-184"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0608.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0608.D20260908.txt",
+  "family": "error-code",
+  "code": "B0608",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-185"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0609.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0609.D20260908.txt",
+  "family": "error-code",
+  "code": "B0609",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-186"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0610.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0610.D20260908.txt",
+  "family": "error-code",
+  "code": "B0610",
+  "destination": "",
+  "phase": 1,
+  "records": 11,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-046",
+   "TC-BR-187"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0611.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0611.D20260908.txt",
+  "family": "error-code",
+  "code": "B0611",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-188"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0612.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0612.D20260908.txt",
+  "family": "error-code",
+  "code": "B0612",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-190"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0613.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0613.D20260908.txt",
+  "family": "error-code",
+  "code": "B0613",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-189"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.B0700.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.B0700.D20260908.txt",
+  "family": "error-code",
+  "code": "B0700",
+  "destination": "",
+  "phase": 1,
+  "records": 11,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-250"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0701.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0701.D20260908.txt",
+  "family": "error-code",
+  "code": "C0701",
+  "destination": "",
+  "phase": 1,
+  "records": 8,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-192",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0702.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0702.D20260908.txt",
+  "family": "error-code",
+  "code": "C0702",
+  "destination": "",
+  "phase": 1,
+  "records": 8,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-193",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0704.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0704.D20260908.txt",
+  "family": "error-code",
+  "code": "C0704",
+  "destination": "",
+  "phase": 1,
+  "records": 8,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-194",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0705.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0705.D20260908.txt",
+  "family": "error-code",
+  "code": "C0705",
+  "destination": "",
+  "phase": 1,
+  "records": 8,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-195",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0706.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0706.D20260908.txt",
+  "family": "error-code",
+  "code": "C0706",
+  "destination": "",
+  "phase": 1,
+  "records": 8,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-196",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0707.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0707.D20260908.txt",
+  "family": "error-code",
+  "code": "C0707",
+  "destination": "",
+  "phase": 1,
+  "records": 8,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-197",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0708.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0708.D20260908.txt",
+  "family": "error-code",
+  "code": "C0708",
+  "destination": "",
+  "phase": 1,
+  "records": 8,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-198",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0709.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0709.D20260908.txt",
+  "family": "error-code",
+  "code": "C0709",
+  "destination": "",
+  "phase": 1,
+  "records": 14,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-058",
+   "TC-BR-201",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0710.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0710.D20260908.txt",
+  "family": "error-code",
+  "code": "C0710",
+  "destination": "",
+  "phase": 1,
+  "records": 14,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-059",
+   "TC-BR-202",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0711.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0711.D20260908.txt",
+  "family": "error-code",
+  "code": "C0711",
+  "destination": "",
+  "phase": 1,
+  "records": 14,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-060",
+   "TC-BR-203",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0712.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0712.D20260908.txt",
+  "family": "error-code",
+  "code": "C0712",
+  "destination": "",
+  "phase": 1,
+  "records": 14,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-061",
+   "TC-BR-205",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0713.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0713.D20260908.txt",
+  "family": "error-code",
+  "code": "C0713",
+  "destination": "",
+  "phase": 1,
+  "records": 26,
+  "bundles": 5,
+  "cases": [
+   "TC-BR-062",
+   "TC-BR-204",
+   "TC-BR-209",
+   "TC-BR-210",
+   "TC-BR-211"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0714.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0714.D20260908.txt",
+  "family": "error-code",
+  "code": "C0714",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0715.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0715.D20260908.txt",
+  "family": "error-code",
+  "code": "C0715",
+  "destination": "",
+  "phase": 1,
+  "records": 17,
+  "bundles": 4,
+  "cases": [
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0716.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0716.D20260908.txt",
+  "family": "error-code",
+  "code": "C0716",
+  "destination": "",
+  "phase": 1,
+  "records": 14,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-064",
+   "TC-BR-191",
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.C0717.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.C0717.D20260908.txt",
+  "family": "error-code",
+  "code": "C0717",
+  "destination": "",
+  "phase": 1,
+  "records": 12,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-209"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.D0101.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.D0101.D20260908.txt",
+  "family": "error-code",
+  "code": "D0101",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-214",
+   "TC-BR-221"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.D0102.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.D0102.D20260908.txt",
+  "family": "error-code",
+  "code": "D0102",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-215",
+   "TC-BR-221"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.D0103.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.D0103.D20260908.txt",
+  "family": "error-code",
+  "code": "D0103",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-216",
+   "TC-BR-221"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.D0104.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.D0104.D20260908.txt",
+  "family": "error-code",
+  "code": "D0104",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-217",
+   "TC-BR-221"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.D0105.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.D0105.D20260908.txt",
+  "family": "error-code",
+  "code": "D0105",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-218",
+   "TC-BR-221"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.D0106.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.D0106.D20260908.txt",
+  "family": "error-code",
+  "code": "D0106",
+  "destination": "",
+  "phase": 1,
+  "records": 12,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-021",
+   "TC-BR-219",
+   "TC-BR-221"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.D0107.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.D0107.D20260908.txt",
+  "family": "error-code",
+  "code": "D0107",
+  "destination": "",
+  "phase": 1,
+  "records": 12,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-220",
+   "TC-BR-221",
+   "TC-BR-246"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-ADBSKIP.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-ADBSKIP.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "ADBSKIP",
+  "phase": 1,
+  "records": 26,
+  "bundles": 5,
+  "cases": [
+   "TC-BR-130"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-CNTLRPT-JAVA-EXCEPTION.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-CNTLRPT-JAVA-EXCEPTION.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "CNTLRPT + Java exception",
+  "phase": 1,
+  "records": 36,
+  "bundles": 7,
+  "cases": [
+   "TC-BR-003"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-CNTLRPT.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-CNTLRPT.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "CNTLRPT",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-004"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-ERRFILE.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-ERRFILE.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "ERRFILE",
+  "phase": 1,
+  "records": 36,
+  "bundles": 7,
+  "cases": [
+   "TC-BR-374",
+   "TC-BR-375",
+   "TC-BR-378",
+   "TC-BR-382",
+   "TC-BR-383",
+   "TC-BR-384",
+   "TC-BR-386"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-LNAERROR.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-LNAERROR.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "LNAERROR",
+  "phase": 1,
+  "records": 96,
+  "bundles": 19,
+  "cases": [
+   "TC-BR-010",
+   "TC-BR-011",
+   "TC-BR-017",
+   "TC-BR-065",
+   "TC-BR-066",
+   "TC-BR-207",
+   "TC-BR-208",
+   "TC-BR-237",
+   "TC-BR-238",
+   "TC-BR-239",
+   "TC-BR-240",
+   "TC-BR-241",
+   "TC-BR-242",
+   "TC-BR-243",
+   "TC-BR-244",
+   "TC-BR-245",
+   "TC-BR-248",
+   "TC-BR-249"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-REPORT-OUTPUT-NO-ERROR-PATH.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-REPORT-OUTPUT-NO-ERROR-PATH.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "Report output (no error path)",
+  "phase": 1,
+  "records": 36,
+  "bundles": 7,
+  "cases": [
+   "TC-BR-014",
+   "TC-BR-039",
+   "TC-BR-040",
+   "TC-BR-049",
+   "TC-BR-137"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-RETURNED-STATUS-ERRFILE.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-RETURNED-STATUS-ERRFILE.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "Returned status → ERRFILE",
+  "phase": 1,
+  "records": 86,
+  "bundles": 17,
+  "cases": [
+   "TC-BR-073",
+   "TC-BR-077",
+   "TC-BR-079",
+   "TC-BR-090",
+   "TC-BR-093",
+   "TC-BR-099",
+   "TC-BR-113",
+   "TC-BR-115",
+   "TC-BR-441",
+   "TC-BR-444",
+   "TC-BR-445",
+   "TC-BR-449",
+   "TC-BR-452",
+   "TC-BR-453",
+   "TC-BR-456",
+   "TC-BR-457",
+   "TC-BR-458"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-RETURNED-STATUS-LNAERROR-ADBERROR.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-RETURNED-STATUS-LNAERROR-ADBERROR.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "Returned status → LNAERROR + ADBERROR",
+  "phase": 1,
+  "records": 311,
+  "bundles": 62,
+  "cases": [
+   "TC-BR-042",
+   "TC-BR-067",
+   "TC-BR-141",
+   "TC-BR-258",
+   "TC-BR-262",
+   "TC-BR-265",
+   "TC-BR-266",
+   "TC-BR-267",
+   "TC-BR-275",
+   "TC-BR-276",
+   "TC-BR-280",
+   "TC-BR-281",
+   "TC-BR-296",
+   "TC-BR-297",
+   "TC-BR-298",
+   "TC-BR-299",
+   "TC-BR-300",
+   "TC-BR-302",
+   "TC-BR-303",
+   "TC-BR-310",
+   "TC-BR-311",
+   "TC-BR-312",
+   "TC-BR-314",
+   "TC-BR-315",
+   "TC-BR-323",
+   "TC-BR-330",
+   "TC-BR-331",
+   "TC-BR-332",
+   "TC-BR-333",
+   "TC-BR-334",
+   "TC-BR-335",
+   "TC-BR-336",
+   "TC-BR-337",
+   "TC-BR-338",
+   "TC-BR-339",
+   "TC-BR-340",
+   "TC-BR-341",
+   "TC-BR-342",
+   "TC-BR-343",
+   "TC-BR-344",
+   "TC-BR-345",
+   "TC-BR-346",
+   "TC-BR-347",
+   "TC-BR-348",
+   "TC-BR-349",
+   "TC-BR-350",
+   "TC-BR-351",
+   "TC-BR-352",
+   "TC-BR-353",
+   "TC-BR-354",
+   "TC-BR-355",
+   "TC-BR-356",
+   "TC-BR-357",
+   "TC-BR-358",
+   "TC-BR-359",
+   "TC-BR-360",
+   "TC-BR-363",
+   "TC-BR-364",
+   "TC-BR-365",
+   "TC-BR-366",
+   "TC-BR-367",
+   "TC-BR-368"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.DEST-RETURNED-STATUS-LNAERROR.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.DEST-RETURNED-STATUS-LNAERROR.D20260908.txt",
+  "family": "destination",
+  "code": "",
+  "destination": "Returned status → LNAERROR",
+  "phase": 1,
+  "records": 161,
+  "bundles": 32,
+  "cases": [
+   "TC-BR-036",
+   "TC-BR-037",
+   "TC-BR-071",
+   "TC-BR-254",
+   "TC-BR-255",
+   "TC-BR-259",
+   "TC-BR-263",
+   "TC-BR-270",
+   "TC-BR-271",
+   "TC-BR-272",
+   "TC-BR-274",
+   "TC-BR-277",
+   "TC-BR-278",
+   "TC-BR-279",
+   "TC-BR-282",
+   "TC-BR-283",
+   "TC-BR-284",
+   "TC-BR-285",
+   "TC-BR-286",
+   "TC-BR-287",
+   "TC-BR-288",
+   "TC-BR-289",
+   "TC-BR-290",
+   "TC-BR-291",
+   "TC-BR-292",
+   "TC-BR-293",
+   "TC-BR-294",
+   "TC-BR-301",
+   "TC-BR-361",
+   "TC-BR-362",
+   "TC-BR-370"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.E0100.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.E0100.D20260908.txt",
+  "family": "error-code",
+  "code": "E0100",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-171"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0101.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0101.D20260908.txt",
+  "family": "error-code",
+  "code": "F0101",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-222",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0102.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0102.D20260908.txt",
+  "family": "error-code",
+  "code": "F0102",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-223",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0103.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0103.D20260908.txt",
+  "family": "error-code",
+  "code": "F0103",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-224",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0104.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0104.D20260908.txt",
+  "family": "error-code",
+  "code": "F0104",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-225",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0105.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0105.D20260908.txt",
+  "family": "error-code",
+  "code": "F0105",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-226",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0106.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0106.D20260908.txt",
+  "family": "error-code",
+  "code": "F0106",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-227",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0107.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0107.D20260908.txt",
+  "family": "error-code",
+  "code": "F0107",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-228",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0108.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0108.D20260908.txt",
+  "family": "error-code",
+  "code": "F0108",
+  "destination": "",
+  "phase": 1,
+  "records": 12,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-229",
+   "TC-BR-233",
+   "TC-BR-234"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0109.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0109.D20260908.txt",
+  "family": "error-code",
+  "code": "F0109",
+  "destination": "",
+  "phase": 1,
+  "records": 12,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-230",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0110.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0110.D20260908.txt",
+  "family": "error-code",
+  "code": "F0110",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-230",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0111.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0111.D20260908.txt",
+  "family": "error-code",
+  "code": "F0111",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-231",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0112.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0112.D20260908.txt",
+  "family": "error-code",
+  "code": "F0112",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-232",
+   "TC-BR-233"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.F0113.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.F0113.D20260908.txt",
+  "family": "error-code",
+  "code": "F0113",
+  "destination": "",
+  "phase": 1,
+  "records": 11,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-228"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.HDR-BR002-NOT-HEADER.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.HDR-BR002-NOT-HEADER.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-002"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.HDR-BR164-FIRST-NOT-A.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.HDR-BR164-FIRST-NOT-A.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 5,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-164"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.HDR-BR165-COMPANY.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.HDR-BR165-COMPANY.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-165"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.HDR-BR166-TRANSDATE.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.HDR-BR166-TRANSDATE.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-166"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.HDR-BR167-RECCOUNT.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.HDR-BR167-RECCOUNT.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-167"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.HDR-BR168-CONTROL-FAILS.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.HDR-BR168-CONTROL-FAILS.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-168"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.O2711.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.O2711.D20260908.txt",
+  "family": "error-code",
+  "code": "O2711",
+  "destination": "",
+  "phase": 1,
+  "records": 11,
+  "bundles": 2,
+  "cases": [
+   "TC-BR-048",
+   "TC-BR-251"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.P2721.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.P2721.D20260908.txt",
+  "family": "error-code",
+  "code": "P2721",
+  "destination": "",
+  "phase": 1,
+  "records": 16,
+  "bundles": 3,
+  "cases": [
+   "TC-BR-048",
+   "TC-BR-252",
+   "TC-BR-253"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.POS-VALID-BASELINE.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.POS-VALID-BASELINE.D20260908.txt",
+  "family": "positive",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 81,
+  "bundles": 16,
+  "cases": [
+   "TC-POS-001",
+   "TC-POS-002",
+   "TC-POS-003",
+   "TC-POS-004",
+   "TC-POS-005",
+   "TC-POS-006",
+   "TC-POS-007",
+   "TC-POS-008",
+   "TC-POS-009",
+   "TC-POS-010",
+   "TC-POS-011",
+   "TC-POS-012",
+   "TC-POS-013",
+   "TC-POS-014",
+   "TC-POS-015",
+   "TC-POS-016"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-B0700-DUPLICATE-BD.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-B0700-DUPLICATE-BD.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-177"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-C0714-SECOND-ACTIVE-BD.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-C0714-SECOND-ACTIVE-BD.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-199"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-C0715-HA-ACTIVE-UNDER-TERMINATED-BD-200.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-C0715-HA-ACTIVE-UNDER-TERMINATED-BD-200.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-200"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-C0715-LLE-ACTIVE-UNDER-TERMINATED-BD-063.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-C0715-LLE-ACTIVE-UNDER-TERMINATED-BD-063.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-063"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-C0715-LLE-ACTIVE-UNDER-TERMINATED-BD-212.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-C0715-LLE-ACTIVE-UNDER-TERMINATED-BD-212.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-212"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-C0717-HA-NO-MANAGER-206.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-C0717-HA-NO-MANAGER-206.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-206"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-C0717-HA-NO-MANAGER-213.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-C0717-HA-NO-MANAGER-213.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 7,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-213"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-D2731-ACTIVE-UNDER-TERMINATED-BD.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-D2731-ACTIVE-UNDER-TERMINATED-BD.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-236"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.STATE-F0113-IP-NO-MANAGER.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.STATE-F0113-IP-NO-MANAGER.D20260908.txt",
+  "family": "state",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 6,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-235"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.T1-BR047-PROFILE-OUT-OF-SEQUENCE.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.T1-BR047-PROFILE-OUT-OF-SEQUENCE.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 5,
+  "bundles": 1,
+  "cases": [
+   "TC-BR-047"
+  ]
+ },
+ {
+  "file": "ALLSTATE.LNA.T1-JAVA-RECOVERED.D20260908.txt",
+  "path": "data/feeds/ALLSTATE.LNA.T1-JAVA-RECOVERED.D20260908.txt",
+  "family": "java-recovered",
+  "code": "",
+  "destination": "",
+  "phase": 1,
+  "records": 37,
+  "bundles": 7,
+  "cases": [
+   "TC-BR-009",
+   "TC-BR-015",
+   "TC-BR-169",
+   "TC-BR-172",
+   "TC-BR-038",
+   "TC-BR-057",
+   "TC-BR-309"
+  ]
+ }
+]
