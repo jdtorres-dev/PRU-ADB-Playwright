@@ -22,6 +22,7 @@ export class ConsolePage {
   private readonly feedDateInput: Locator;
   private readonly fileInput: Locator;
   private readonly uploadButton: Locator;
+  private readonly restartCheckbox: Locator;
   private readonly runIdInput: Locator;
   private readonly lookupButton: Locator;
   private readonly downloadAllButton: Locator;
@@ -31,6 +32,7 @@ export class ConsolePage {
     this.feedDateInput = page.locator('#uploadFeedDate');
     this.fileInput = page.locator('#uploadFile');
     this.uploadButton = page.locator('#uploadBtn');
+    this.restartCheckbox = page.locator('#uploadRestart');
     this.runIdInput = page.locator('#runIdInput');
     this.lookupButton = page.locator('#lookupBtn');
     this.downloadAllButton = page.locator('#downloadAllBtn');
@@ -72,6 +74,12 @@ export class ConsolePage {
       throw new Error(`Feed file not found: ${absolutePath}`);
     }
     await this.fileInput.setInputFiles(absolutePath);
+  }
+
+  /** The upload form's own "restart" checkbox - independent of file/date selection. */
+  async setRestart(checked: boolean): Promise<void> {
+    if (checked) await this.restartCheckbox.check();
+    else await this.restartCheckbox.uncheck();
   }
 
   /**
@@ -161,6 +169,21 @@ export class ConsolePage {
       await this.page.waitForTimeout(1500);
     }
     throw new Error(`Run ${runId} did not settle within ${timeoutMs}ms (last status ${last?.status})`);
+  }
+
+  /**
+   * One-shot status lookup by run id, independent of waitForRunToSettle's
+   * polling loop (which only returns the terminal payload). Same endpoint,
+   * used to observe an in-progress run's own answerable state.
+   */
+  async getRunStatus(runId: string): Promise<any> {
+    return this.page.evaluate(async (id) => {
+      const res = await fetch(`/api/v1/ingestion/runs/${encodeURIComponent(id)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return { status: `HTTP_${res.status}` };
+      return res.json();
+    }, runId);
   }
 
   /** Loads the run into the console view so the artifacts panel is populated. */
