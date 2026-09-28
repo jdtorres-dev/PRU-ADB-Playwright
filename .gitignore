@@ -1,6 +1,6 @@
 node_modules/
 .env
-
+settings.local.json
 # Playwright
 /playwright-report/
 /test-results/

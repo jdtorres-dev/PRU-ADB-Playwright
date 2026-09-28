@@ -1,0 +1,310 @@
+===== TC-BR-016 BR-016 =====
+BRDesc: The first firm record beneath a contra header is the broker dealer itself, and is validated more strictly than the firms that follow it
+TriggerCond: 1. Ingest a bundle whose FIRST firm record omits a field required only of the broker dealer.
+2. Ingest a second bundle where that same field is missing on a LATER firm instead.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: bundle 1 refused with the BD-specific error in LNAERROR and no organization row created; bundle 2 passes that check.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-020 BR-020 =====
+BRDesc: A firm presented beneath an already established broker dealer does not create an organisation; it is appointed against the organisation the bundle already established
+TriggerCond: 1. Ingest a bundle carrying a BD followed by an LLE or HA.
+2. Count organization rows for that org code, then read node_relationship.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: exactly one organization row, with the later firm linked to it by a node_relationship row (BD_TO_LLE for an LLE).
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-022 BR-022 =====
+BRDesc: Only activity recorded against the partner is extracted for onward processing; activity belonging to any other purpose is left untouched
+TriggerCond: 1. Insert two activity_log_entry rows for the same code: one with purpose_code ALLSTATE, one with another purpose.
+2. Run a cycle.
+3. Query adsi_master.contract_record and organization_record.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: only the ALLSTATE row reached the master.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-023 BR-023 =====
+BRDesc: Activity is extracted in contract order within subject, and the order in which it is presented was deliberately changed so that a contract's activity is seen together rather than spread across the run
+TriggerCond: 1. Post activity for two contracts, interleaved by timestamp.
+2. Query activity_log_entry ordered by pru_contract_or_org_code, subject_id, activity_ts.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: each contract's rows are contiguous. The org-before-contract sort is in memory - code level only, nothing to query.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-024 BR-024 =====
+BRDesc: Each extracted item is resolved to the thing it concerns — an organisation, a contract or an individual producer — and the kind is carried forward so the comparison knows which set of rules to apply
+TriggerCond: 1. Post activity for a 5-char org code, a 6-char contract code, and a code held in neither table.
+2. Run a cycle.
+3. Check both master tables and errfile-<CCYYMMDD>.csv.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: org row in organization_record, contract row in contract_record, and a D001 line for the third.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-034 BR-034 =====
+BRDesc: The four master actions are tested independently rather than as alternatives, so a single activity record can satisfy more than one and be acted on twice
+TriggerCond: 1. Run a cycle carrying one activity record per contract.
+2. Count the rows changed in adsi_master.contract_record and organization_record.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: one change per record, never two. Confirm with AdsiMasterUpdateServiceTest.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-041 BR-041 =====
+BRDesc: An organisation amendment is recorded only for a firm presented as a broker dealer, and only where the record being appointed is a firm rather than a person
+TriggerCond: 1. Run one cycle containing (a) a firm presented as a BROKER DEALER, (b) a firm NOT presented as a BD, and (c) a person.
+2. Separate the org-keyed activity rows from the contract-keyed ones.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: organization-level change rows are recorded for BD-presented firms only.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-134 BR-134 =====
+BRDesc: A profile presented as history only touches nothing but the record of the appointment's history, and can never bring an appointment into being
+TriggerCond: Where: DB. A history-only profile (profile type H) writes to node_relationship_history only.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: The record is not applied. No contract, organisation or profile is created or updated for it, and it does not appear in the load output.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-139 BR-139 =====
+BRDesc: The second kind of address is maintained only for a broker dealer and for an individual producer, and is never maintained for a legal entity or a hierarchy agency
+TriggerCond: 1. Ingest a BD and an IP, each with a second address.
+2. Ingest an LLE and an HA with the same record shape.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: MAILING only for the BD, BUSINESS for the IP, and no second address row for the LLE or HA.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-140 BR-140 =====
+BRDesc: Where no address of a kind is held at all, one is inserted without any test of whether the detail presented is empty, so an empty address record may be created where none existed
+TriggerCond: 1. Ingest a brand-new contract whose address block is entirely blank.
+2. Query address for that key.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: a row EXISTS, with blank line1 / city_name / state_code - created, not skipped.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-142 BR-142 =====
+BRDesc: The office code and the initials of an organisation are drawn by position from a fixed alphabet, and neither generator makes a second attempt where the value it produced is already in use
+TriggerCond: 1. Run: mvn test -Dtest=OrganizationCodeGeneratorTest and mvn test -Dtest=IdGenerationAlphabetsTest - these pin the base-35 positional draw used for both generators.
+2. Force a collision: seed an organization row already holding the code / initials the counter will next produce, then run a cycle that creates a new organization.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: neither generator makes a second attempt - it uses the colliding value and logs a warning. A RETRY would be the defect. Automated test that already covers this: OfficeCodeCollisionFixturesIT.
+ValidationSource: Control Report (CNTLRPT) counters + absence from Load Output
+
+===== TC-BR-143 BR-143 =====
+BRDesc: A contract number is one fixed leading character and five drawn from an alphabet that excludes the vowels and the digit zero, and is generated again until it is one no contract anywhere in the receiving system already holds
+TriggerCond: Where: DB, plus unit test. contract.pru_contract_number - 6 chars: a fixed leading character plus 5 drawn from 123456789BCDFGHJKLMNPQRSTVWXYZ (no vowels, no zero).
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: The record is not applied. No contract, organisation or profile is created or updated for it, and it does not appear in the load output.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-149 BR-149 =====
+BRDesc: The trailer section of the record is cleared in full before it is first used for an item new to the master, so no detail belonging to a previously built item can appear against it
+TriggerCond: 1. In one cycle, process a contract carrying several designations and BASIC4 sections, immediately followed by a brand-new contract carrying none.
+2. Query adsi_master.contract_record for the new contract.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: empty designations and basic4_sections - none of the previous contract's detail appears against it.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-260 BR-260 =====
+BRDesc: The organisation a broker dealer sits beneath is found by reading the node relationship table for the partner interface purpose and the parent relationship type.
+TriggerCond: 1. After a cycle: SELECT parent_node_id, child_node_id, relationship_purpose_code, relationship_type, relationship_status_code, relationship_start_date, relationship_end_date FROM node_relationship WHERE relationship_type = 'ORG_TO_BD'.
+2. Join parent_node_id back to organization (node_id, org_code, org_name) to confirm the BD sits beneath the office you expect; join child_node_id to contract (node_id, allstate_id, entity_type).
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: one ORG_TO_BD row per BD, resolving to the right organization.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-264 BR-264 =====
+BRDesc: The organisation's stored detail is read in full from the organisation table for the parent node and purpose, so that the incoming record can be compared against what is already held.
+TriggerCond: 1. Check for Node table (the Node ID should be generated, each row has its id)
+2. Check for Organization Table (Its Node ID should be same with 1). One org shall be saved if the record contains one bundle.
+3. Check for Node Relationship Table. Org-->Parent ID, Child_ID-->Firm. The relationship needs to be "ORG-TO-BD"
+
+"BD-TO-LLE" --> (Firm to Firm)
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: The field/record state matches the rule as described, verified directly against the cited table/column or artefact in the Verification Basis.
+ValidationSource: Observed directly against the modernised application (see Verification Basis)
+
+===== TC-BR-268 BR-268 =====
+BRDesc: Where the firm name supplied by the caller is unchanged from the name already stored, no update is issued. The call is marked as having made no change and proceeds directly to assembling the output record.
+TriggerCond: 1. Firm can be seen in line 10-78. Should be seen in logs not in any report
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: The field/record state matches the rule as described, verified directly against the cited table/column or artefact in the Verification Basis.
+ValidationSource: Observed directly against the modernised application (see Verification Basis)
+
+===== TC-BR-306 BR-306 =====
+BRDesc: An open-ended relationship end date arriving in the partner's own convention is converted to the receiving system's convention before it is stored.
+TriggerCond: 1. Ingest a producer whose relationship end date is the literal 99999999.
+2. Query node_relationship.relationship_end_date.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: NULL - not 9999-12-31, not blank text.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-307 BR-307 =====
+BRDesc: An open-ended firm profile termination date arriving in the partner's own convention is converted to the receiving system's convention before it is stored, on the same terms as a relationship end date.
+TriggerCond: 1. Ingest a firm whose profile termination date is the literal 99999999.
+2. Query node_relationship.relationship_end_date for that firm.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: NULL.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-321 BR-321 =====
+BRDesc: Where no date of birth is supplied for a person being created, a placeholder date is stored rather than the field being left empty.
+TriggerCond: 1. Ingest a NEW producer with the date-of-birth field blank.
+2. Query person.birth_date.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: The field/record state matches the rule as described, verified directly against the cited table/column or artefact in the Verification Basis.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-372 BR-372 =====
+BRDesc: The day's activity is read in contract order, and a change of contract number marks the end of the group just read. That completed group is then written to the extract before the new one begins, so a subject's activity is never split across two extract records.
+TriggerCond: 1. Post several activity rows for one contract on one day.
+2. Run a cycle.
+3. Count the rows changed in adsi_master.contract_record.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: one master update for that contract, not several.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-373 BR-373 =====
+BRDesc: Whether an activity group concerns an organisation or a producer's contract is decided from the shape of its contract number: an organisation code occupies only five of the six positions, so a blank sixth position identifies an organisation.
+TriggerCond: 1. Post activity for a 5-char org code and a 6-char contract code on the same day.
+2. Run a cycle.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: one row in adsi_master.organization_record and one in adsi_master.contract_record.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-376 BR-376 =====
+BRDesc: Whether a contract belongs to an individual producer decides whether that person's other contracts are examined. Only an individual producer's other contracts are scanned.
+TriggerCond: 1. Set contract.entity_type to BROKER_DEALER for a subject holding two contracts; post activity on one.
+2. Run a cycle.
+3. Query adsi_master.contract_record for that subject.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: no extra contract pulled in.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-377 BR-377 =====
+BRDesc: A producer's other contracts are looked up once, on reaching the last activity row for that producer, and only where the contract just processed belonged to an individual producer. Otherwise the lookup is skipped entirely.
+TriggerCond: 1. Set up an IP (contract.entity_type = INVESTMENT_PROFESSIONAL) with two contracts; post activity for one only.
+2. Run a cycle.
+3. Query adsi_master.contract_record.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: both contracts present. Repeat with entity_type BROKER_DEALER - only the one with activity appears.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-401 BR-401 =====
+BRDesc: An organisation with no prior ADSI master record has every field treated as changed, and its activity record is written without any comparison being performed.
+TriggerCond: 1. Run a cycle with a feed record for an org with no row yet on the ADSI master - HR2 auto-chains right after.
+ 2. Check adsi_master.organization_record for that org's code - the whole row.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: a new row appears, fully populated.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-439 BR-439 =====
+BRDesc: A contract with no prior ADSI master record has every field treated as changed, and its activity record is written without any comparison being performed.
+TriggerCond: 1. Run a cycle with a feed record for a contract with no row yet on the ADSI master - HR2 auto-chains right after.
+ 2. Check adsi_master.contract_record.* for that same node.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: a new row appears, fully populated.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-478 BR-478 =====
+BRDesc: An activity record describing a subject that has no prior master record, or that is explicitly marked as having none, is applied by writing a new master record.
+TriggerCond: 1. Post activity for a subject holding no existing master record.
+2. Run a cycle.
+3. Query adsi_master.contract_record (or organization_record for a 5-char code).
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: one new row and no delete anywhere.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-483 BR-483 =====
+BRDesc: Where the first position of the key is populated, the contract layout is moved into the master master record, together with the supplemental sections the contract carries.
+TriggerCond: 1. Run a cycle for a contract carrying designations and BASIC4 sections.
+2. Query adsi_master.contract_record.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: the basic1 columns plus populated designations and basic4_sections.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-484 BR-484 =====
+BRDesc: The supplemental sections carrying miscellaneous and additional detail are copied to the master only where the activity record declares that it holds any. A declared count of zero copies none.
+TriggerCond: 1. Run a cycle covering one contract with no supplemental sections and one with several.
+2. Compare the JSONB array lengths on both rows.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: 0 for the first, the matching count for the second. Caps: designations 7, basic4_sections 10.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-027 BR-027 =====
+BRDesc: Where an item is new to the receiving system, every field is marked as changed rather than being compared, and the item is marked as having no prior record
+TriggerCond: 1. Run a cycle with a feed record for a node with no row yet on the ADSI master - HR2 auto-chains right after.
+ 2. Check adsi_master.organization_record (or contract_record for a contract) for that contract number - the whole row.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: a new row appears, fully populated in one write.
+ 
+ (Unit-test proof: AdsiChangeDetectionServiceTest.newOrganizationRecordWhenNothingStoredYet / newContractRecordWhenNothingStoredYet)
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-464 BR-464 =====
+BRDesc: A subject whose relationship is not active carries the date it ended and the organisation it ended under. The date is carried only where the relationship holds one; the organisation code is carried in every case.
+TriggerCond: 1. Set up two subjects whose relationship is not active (T or I): one with a relationship end date, one without.
+2. Run ingestion then sync for that cycle date.
+3. Authoritative check - query adsi_master.contract_record for both nodes: final_org_code should be populated for both (carried in every case regardless of whether a date exists); final_date should equal the relationship end date for the first and be null for the second.
+4. Optional cross-check via File 7 - ADSIMSTR/comparison-ADSIMSTR-<cycleDate>.html - same reliability caveat as BR-447: treat it as a secondary look only, not a pass/fail source.
+5. Dev reference: AdsiMasterRecordBuilder.buildContractRecord() and AdsiMasterRecordBuilderTest.buildContractRecordPopulatesFinalCodeDateAndOrgCodeForTerminatedRelationship() / buildContractRecordSetsFinalOrgCodeWithoutFinalDateWhenInactiveRelationshipHasNoEndDate().
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: Master and control-table state remain exactly as they were before the run started; no records are written or updated for this cycle.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-476 BR-476 =====
+BRDesc: Reaching the end of the activity file is the normal way the run finishes and is not an error. The processing loop is ended gracefully.
+TriggerCond: 1. Run a cycle for a date with no Allstate activity.
+2. Check the run status, the log, and adsi_master.master_control.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: COMPLETED, INFO '0 change(s) applied', no error artifact, and last_updated_date still advanced to the cycle date.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-482 BR-482 =====
+BRDesc: Whether an incoming activity master record describes an organisation or a contract is decided from the first position of its key, and the organisation layout is moved into the master master record where that position is blank.
+TriggerCond: 1. Post activity for one org code and one contract code.
+2. Run a cycle.
+3. Query both master tables.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: the org entry in organization_record, the contract entry in contract_record.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+
+===== TC-BR-485 BR-485 =====
+BRDesc: A duplicate value on a non-unique alternate key is tolerated when writing to the master and is accepted as success. Any other unsuccessful status stops the run.
+TriggerCond: 1. Load two contracts carrying the same TIN.
+2. Run a cycle.
+3. Query adsi_master.contract_record on alternate_key_ssn_or_tin.
+
+Change only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.
+ExpDataEffect: both rows present and run COMPLETED - no duplicate-key error is possible.
+ValidationSource: ADSI Master DB (see Verification Basis for the specific table/column)
+

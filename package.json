@@ -21,8 +21,12 @@
     "@playwright/test": "^1.55.0",
     "@types/adm-zip": "^0.5.8",
     "@types/node": "^20.14.0",
+    "@types/pg": "^8.23.1",
     "adm-zip": "^0.5.16",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }

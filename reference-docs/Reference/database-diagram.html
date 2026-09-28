@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADB Database Diagram</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f1f3f6;
+    --text: #1b1f24;
+    --muted: #5d6673;
+    --border: #d5dae1;
+    --accent: #2f6fdb;
+    --fk: #2f6fdb;
+    --logical: #b0701a;
+    --derived: #7a4fc9;
+    --pk: #b8860b;
+    --pii: #c0392b;
+    --dim: 0.12;
+    --head-public: #e7effc;
+    --head-adsi: #efe9fa;
+    --head-ctl: #eceff3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111418;
+      --surface: #1a1e24;
+      --surface-2: #222730;
+      --text: #e5e8ec;
+      --muted: #9aa3ae;
+      --border: #333a45;
+      --accent: #6ea0ff;
+      --fk: #6ea0ff;
+      --logical: #e0a44a;
+      --derived: #b596f2;
+      --pk: #e2b93b;
+      --pii: #ff7b6b;
+      --head-public: #1f2d45;
+      --head-adsi: #2b2340;
+      --head-ctl: #262b33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111418;
+    --surface: #1a1e24;
+    --surface-2: #222730;
+    --text: #e5e8ec;
+    --muted: #9aa3ae;
+    --border: #333a45;
+    --accent: #6ea0ff;
+    --fk: #6ea0ff;
+    --logical: #e0a44a;
+    --derived: #b596f2;
+    --pk: #e2b93b;
+    --pii: #ff7b6b;
+    --head-public: #1f2d45;
+    --head-adsi: #2b2340;
+    --head-ctl: #262b33;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .page { max-width: 1760px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { font-size: 22px; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); max-width: 900px; }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+    margin: 18px 0 12px; font-size: 13px; color: var(--muted);
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+  .legend svg { overflow: visible; }
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .02em;
+    padding: 0 4px; border-radius: 3px; line-height: 15px; border: 1px solid currentColor;
+  }
+  .b-pk { color: var(--pk); }
+  .b-fk { color: var(--fk); }
+  .b-lk { color: var(--logical); }
+  .b-uq { color: var(--muted); }
+  .b-pii { color: var(--pii); }
+  button {
+    font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  .spacer { flex: 1; }
+
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  .scroller {
+    overflow-x: auto; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface-2);
+  }
+  .canvas { position: relative; padding: 28px; width: max-content; }
+  .canvas > svg.edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
+  .grid { display: flex; gap: 88px; align-items: flex-start; position: relative; z-index: 1; }
+  .col { display: flex; flex-direction: column; gap: 36px; width: 290px; }
+  .zone-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    margin: 0 0 -24px 2px;
+  }
+
+  .tbl {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); transition: opacity .15s;
+  }
+  .tbl-head { padding: 7px 10px 6px; border-bottom: 1px solid var(--border); }
+  .tbl.public .tbl-head { background: var(--head-public); }
+  .tbl.adsi .tbl-head { background: var(--head-adsi); }
+  .tbl.ctl .tbl-head { background: var(--head-ctl); }
+  .tbl-name { font-weight: 650; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+  .tbl-schema { color: var(--muted); font-weight: 400; }
+  .tbl-legacy { font-size: 11.5px; color: var(--muted); }
+  .rows { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  .row {
+    display: flex; gap: 6px; align-items: center; padding: 2px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  }
+  .row:last-child { border-bottom: 0; }
+  .row .cn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .ct { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .row.key .cn { font-weight: 600; }
+  .row .badges { display: inline-flex; gap: 3px; }
+  .more {
+    display: block; width: 100%; border: 0; border-radius: 0; border-top: 1px solid var(--border);
+    background: var(--surface-2); color: var(--muted); font-size: 12px; padding: 4px 10px; text-align: left;
+  }
+  .more:hover { color: var(--accent); }
+  .tbl-note { font-size: 11.5px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--border); }
+
+  path.edge { fill: none; stroke-width: 1.6; transition: opacity .15s, stroke-width .15s; }
+  path.edge.fk { stroke: var(--fk); }
+  path.edge.logical { stroke: var(--logical); stroke-dasharray: 6 4; }
+  path.edge.derived { stroke: var(--derived); stroke-dasharray: 2 4; stroke-linecap: round; }
+  .focus .tbl:not(.hot) { opacity: .35; }
+  .focus path.edge:not(.hot) { opacity: var(--dim); }
+  path.edge.hot { stroke-width: 2.6; }
+
+  .ctl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+
+  table.rels { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px; }
+  .rels-wrap { overflow-x: auto; }
+  table.rels th, table.rels td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.rels th { background: var(--surface-2); font-weight: 600; font-size: 12px; color: var(--muted); }
+  table.rels tr:last-child td { border-bottom: 0; }
+  table.rels code { font-size: 12px; }
+  table.rels tbody tr { cursor: pointer; }
+  table.rels tbody tr:hover td { background: var(--surface-2); }
+  .kind { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .kind.fk { color: var(--fk); } .kind.logical { color: var(--logical); } .kind.derived { color: var(--derived); }
+  footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>ADB database diagram</h1>
+    <p>Tables and relationships as the Flyway migrations (<code>V1</code>–<code>V21</code>) create them in the local Postgres
+      stand-in for DB2 (schema <code>AX29UTDA</code>) and the interim <code>adsi_master</code> schema.
+      Hover a table to highlight its relationships. Click a row in the relationship list to find it on the diagram.</p>
+  </header>
+
+  <div class="toolbar">
+    <div class="legend">
+      <span><svg width="34" height="10"><path d="M0 5H34" stroke="var(--fk)" stroke-width="1.8"/></svg>Enforced foreign key</span>
+      <span><svg width="34" height="10"><path d="M0 5H34" stroke="var(--logical)" stroke-width="1.8" stroke-dasharray="6 4"/></svg>Logical link (by convention, no FK)</span>
+      <span><svg width="34" height="10"><path d="M0 5H34" stroke="var(--derived)" stroke-width="1.8" stroke-dasharray="2 4" stroke-linecap="round"/></svg>HR2-derived (ADB → ADSI Master)</span>
+      <span><svg width="30" height="14"><path d="M2 7H28 M2 1V13" stroke="var(--muted)" stroke-width="1.5" fill="none"/></svg>one</span>
+      <span><svg width="30" height="14"><path d="M2 7H28 M14 7L28 1 M14 7L28 13" stroke="var(--muted)" stroke-width="1.5" fill="none"/></svg>many</span>
+      <span><span class="badge b-pk">PK</span><span class="badge b-fk">FK</span><span class="badge b-lk">LK</span><span class="badge b-uq">UQ</span><span class="badge b-pii">PII</span></span>
+    </div>
+    <div class="spacer"></div>
+    <button id="toggleAll" type="button">Expand all columns</button>
+  </div>
+
+  <h2>Core ADB and ADSI Master Store</h2>
+  <div class="scroller">
+    <div class="canvas" id="canvas">
+      <svg class="edges" id="edges" aria-hidden="true"></svg>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+
+  <h2>Control and configuration tables (no relationships)</h2>
+  <div class="ctl-grid" id="ctlGrid"></div>
+
+  <h2>Relationship list</h2>
+  <div class="rels-wrap">
+    <table class="rels">
+      <thead><tr><th>Kind</th><th>From (many side)</th><th>To (one side)</th><th>Cardinality</th><th>Notes</th></tr></thead>
+      <tbody id="relBody"></tbody>
+    </table>
+  </div>
+
+  <footer>Source of truth: <code>src/main/resources/db/migration</code>. Column lengths marked as inferred in the migrations
+    (lookup tables, <code>adsi_master</code> record layouts) are still provisional. This diagram holds schema only, no data.</footer>
+</div>
+
+<script>
+// ---- Schema model -------------------------------------------------------
+// flags: pk, fk, lk (logical key, no FK), uq, pii
+const AUDIT = [["crt_ts","TIMESTAMP"],["crt_by_id","VARCHAR(8)"],["updt_ts","TIMESTAMP"],["updt_by_id","VARCHAR(8)"]];
+const T = (id, o) => ({ id, schema: "public", zone: "public", ...o });
+
+const TABLES = [
+  // column 1: lookups
+  T("distribution_channel", { col: 0, legacy: "UTT_ALL_DIST", cols: [
+    ["distribution_channel_code","VARCHAR(2)","pk"], ["distribution_channel_name","VARCHAR(50)"]]}),
+  T("firm_type", { col: 0, legacy: "UTT_ALL_FIRM_TYP", cols: [
+    ["firm_type_code","VARCHAR(2)","pk"], ["firm_type_description","VARCHAR(50)"]]}),
+  T("state_code", { col: 0, legacy: "VSAMTABL UTTSTA01", cols: [["state_code","VARCHAR(2)","pk"]],
+    note: "Validates contract.resident_state and address.state_code in the application." }),
+  T("legacy_oa_contract", { col: 0, legacy: "UTT_OA (1 of 46 columns)", cols: [["contract_number","VARCHAR(6)","pk"]],
+    note: "Read only, to check that a newly generated PRU contract number is not already taken." }),
+
+  // column 2: organization / contract
+  T("organization", { col: 1, legacy: "UTT_ALL_ORG", cols: [
+    ["node_id","BIGINT","pk fk"], ["org_code","VARCHAR(5)","lk"], ["org_subject_id","BIGINT","lk"],
+    ["org_name","VARCHAR(50)"], ["purpose_code","VARCHAR(10)"], ["distribution_channel_code","VARCHAR(2)","fk"],
+    ["line_of_business_code","VARCHAR(2)"], ["sub_channel_type_code","VARCHAR(2)"], ["org_initials","VARCHAR(3)"], ...AUDIT]}),
+  T("contract", { col: 1, legacy: "UTT_ALL_CNTR", cols: [
+    ["node_id","BIGINT","pk fk"], ["pru_contract_number","VARCHAR(6)","uq lk"], ["allstate_id","VARCHAR(10)"],
+    ["purpose_code","VARCHAR(10)"], ["subject_id","BIGINT","lk"], ["entity_type","VARCHAR(30)"],
+    ["resident_state","VARCHAR(2)","lk"], ["producer_role_code","VARCHAR(3)"], ["firm_type_code","VARCHAR(2)","fk"],
+    ["external_agent_id","VARCHAR(20)"], ...AUDIT],
+    note: "entity_type: BROKER_DEALER, LICENSED_LIFE_ENTITY, HOUSE_ACCOUNT, INVESTMENT_PROFESSIONAL" }),
+  T("contract_history", { col: 1, legacy: "UTT_ALL_CNTR_HT", cols: [
+    ["node_id","BIGINT","pk fk"], ["history_ts","TIMESTAMP","pk"], ["pru_contract_number","VARCHAR(6)"],
+    ["allstate_id","VARCHAR(10)"], ["purpose_code","VARCHAR(10)"], ["subject_id","BIGINT"], ["entity_type","VARCHAR(30)"],
+    ["resident_state","VARCHAR(2)"], ["producer_role_code","VARCHAR(3)"], ["firm_type_code","VARCHAR(2)"],
+    ["external_agent_id","VARCHAR(20)"], ["crt_by_id","VARCHAR(8)"], ["updt_ts","TIMESTAMP"], ["updt_by_id","VARCHAR(8)"],
+    ["old_values","TEXT"], ["new_values","TEXT"]]}),
+  T("activity_log_entry", { col: 1, legacy: "UTT_ALL_ACTIVITY", cols: [
+    ["pru_contract_or_org_code","VARCHAR(6)","pk lk"], ["activity_ts","TIMESTAMP","pk"], ["purpose_code","VARCHAR(10)"],
+    ["subject_id","BIGINT"], ["transaction_code","VARCHAR(6)"], ["crt_by_id","VARCHAR(8)"], ["updt_ts","TIMESTAMP"],
+    ["updt_by_id","VARCHAR(8)"], ["processed_ts","TIMESTAMP"]],
+    note: "HR2 reads this to decide what goes to the ADSI Master. Codes: AP00AP, MI00MI, RA00RA, TE00TE, ORO0OR, ORO2OR." }),
+
+  // column 3: node hierarchy
+  T("node", { col: 2, legacy: "UTT_ALL_NODE", cols: [
+    ["node_id","BIGINT","pk"], ["node_type","VARCHAR(20)"]],
+    note: "node_type: ORGANIZATION or CONTRACT. node_id comes from the NODE sequence counter." }),
+  T("node_relationship", { col: 2, legacy: "UTT_ALL_NODE_REL", cols: [
+    ["parent_node_id","BIGINT","pk fk"], ["child_node_id","BIGINT","pk fk"], ["relationship_purpose_code","VARCHAR(3)","pk"],
+    ["relationship_type","VARCHAR(20)","pk"], ["relationship_status_code","VARCHAR(1)","fk"],
+    ["relationship_start_date","DATE"], ["relationship_end_date","DATE"], ...AUDIT],
+    note: "relationship_type: ORG_TO_BD, BD_TO_LLE, BD_LLE_TO_IP, BD_LLE_TO_HA" }),
+  T("relationship_status", { col: 2, legacy: "UTT_ALL_REL_STAT", cols: [
+    ["relationship_status_code","VARCHAR(1)","pk"], ["relationship_status_description","VARCHAR(50)"]]}),
+  T("node_relationship_history", { col: 2, legacy: "UTT_ALL_NODE_RELHT", cols: [
+    ["history_ts","TIMESTAMP","pk"], ["parent_node_id","BIGINT","pk fk"], ["child_node_id","BIGINT","pk fk"],
+    ["relationship_purpose_code","VARCHAR(3)"], ["relationship_type","VARCHAR(20)"], ["relationship_status_code","VARCHAR(1)"],
+    ["relationship_start_date","DATE"], ["relationship_end_date","DATE"], ["crt_by_id","VARCHAR(8)"], ["updt_ts","TIMESTAMP"],
+    ["updt_by_id","VARCHAR(8)"], ["old_values","TEXT"], ["new_values","TEXT"]]}),
+
+  // column 4: firm / person / address
+  T("firm", { col: 3, legacy: "UTT_ALL_FIRM", cols: [
+    ["firm_subject_id","BIGINT","pk"], ["tin_number","VARCHAR(9)","pii"], ["purpose_code","VARCHAR(10)"],
+    ["firm_name","VARCHAR(50)"], ["abbreviated_firm_name","VARCHAR(30)"], ["crd_number","VARCHAR(10)"], ...AUDIT],
+    note: "One row per BD, LLE or HA entity." }),
+  T("person", { col: 3, legacy: "UTT_ALL_PERSON", cols: [
+    ["person_subject_id","BIGINT","pk"], ["ssn","VARCHAR(9)","lk pii"], ["purpose_code","VARCHAR(10)"],
+    ["prefix_name","VARCHAR(10)"], ["first_name","VARCHAR(20)"], ["middle_name","VARCHAR(25)"], ["last_name","VARCHAR(30)"],
+    ["suffix_name","VARCHAR(20)"], ["call_name","VARCHAR(12)"], ["birth_date","DATE","pii"], ["sex","VARCHAR(1)"],
+    ["marital_status","VARCHAR(1)"], ["citizen","BOOLEAN"], ["crd_number","VARCHAR(10)"], ...AUDIT],
+    note: "One row per investment professional (IP)." }),
+  T("person_designation", { col: 3, legacy: "person ↔ designation", cols: [
+    ["person_subject_id","BIGINT","pk fk"], ["designation_code","VARCHAR(5)","pk fk"], ["designation_ordinal","SMALLINT"]]}),
+  T("designation", { col: 3, legacy: "UTT_ALL_DSGN", cols: [
+    ["designation_code","VARCHAR(5)","pk"], ["designation_name","VARCHAR(50)"]]}),
+  T("address", { col: 3, legacy: "UTT_ALL_ADDR", cols: [
+    ["ssn_or_contract_number","VARCHAR(9)","pk lk"], ["address_type","VARCHAR(10)","pk"], ["purpose_code","VARCHAR(10)","pk"],
+    ["subject_id","BIGINT"], ["line1","VARCHAR(40)"], ["line2","VARCHAR(40)"], ["line3","VARCHAR(40)"],
+    ["city_name","VARCHAR(20)"], ["state_code","VARCHAR(2)","lk"], ["zip_code","VARCHAR(10)"], ["country_code","VARCHAR(2)"],
+    ["phone_number","VARCHAR(10)"], ["fax_number","VARCHAR(10)"], ["email","VARCHAR(60)"], ...AUDIT],
+    note: "address_type: BUSINESS, HOME, COMMISSION, MAILING. HOME addresses are keyed by SSN, the others by contract number." }),
+
+  // column 5: adsi_master schema
+  { id: "master_control", schema: "adsi_master", zone: "adsi", col: 4, legacy: "ADSI store control", cols: [
+    ["control_id","VARCHAR(4)","pk"], ["last_updated_date","DATE"]],
+    note: "Single row (control_id = 'ADSI'). Checked on every HR2 run to enforce run order." },
+  { id: "organization_record", schema: "adsi_master", zone: "adsi", col: 4, legacy: "ADSI Master org variant", cols: [
+    ["contract_number","VARCHAR(5)","pk lk"], ["subject_id","BIGINT","lk"], ["region_marketing_office_code","VARCHAR(1)"],
+    ["office_code","VARCHAR(4)"], ["detach_office_code","VARCHAR(1)"], ["region","VARCHAR(1)"],
+    ["alternate_key_ssn_or_tin","VARCHAR(9)","pii"], ["alternate_key_last_name","VARCHAR(25)"], ["org_type_code","VARCHAR(2)"],
+    ["org_status","VARCHAR(1)"], ["org_create_date","DATE"], ["org_elimination_date","DATE"], ["org_full_name","VARCHAR(50)"],
+    ["address_line1","VARCHAR(40)"], ["address_line2","VARCHAR(40)"], ["address_line3","VARCHAR(40)"], ["city_name","VARCHAR(20)"],
+    ["state_code","VARCHAR(2)"], ["zip_code","VARCHAR(10)"], ["phone_number","VARCHAR(10)"], ["fax_number","VARCHAR(10)"],
+    ["office_manager_name","VARCHAR(30)"], ["associate_manager_name","VARCHAR(30)"], ["cso_code","VARCHAR(2)"],
+    ["cso_phone_number","VARCHAR(10)"], ["buf_code","VARCHAR(3)"], ["org_business_unit_code","VARCHAR(2)"],
+    ["pr_org_code","VARCHAR(1)"], ["pr_org_subtype_code","VARCHAR(2)"], ["aos_rmo","VARCHAR(1)"], ["aos_region","VARCHAR(1)"]],
+    note: "Non-key columns are provisional (open item C11)." },
+  { id: "contract_record", schema: "adsi_master", zone: "adsi", col: 4, legacy: "ALL-CONTRACT-RECORD (855 bytes)", cols: [
+    ["contract_number","VARCHAR(5)","pk lk"], ["region_marketing_office_code","VARCHAR(1)"], ["office_code","VARCHAR(4)"],
+    ["detach_office_code","VARCHAR(1)"], ["region","VARCHAR(1)"], ["alternate_key_ssn_or_tin","VARCHAR(9)","pii"],
+    ["alternate_key_last_name","VARCHAR(25)"], ["title_name","VARCHAR(10)"], ["first_name","VARCHAR(20)"],
+    ["middle_name","VARCHAR(25)"], ["last_name","VARCHAR(50)"], ["suffix_name","VARCHAR(20)"], ["call_name","VARCHAR(12)"],
+    ["designations","JSONB (≤7)"], ["home_address_line1","VARCHAR(40)","pii"], ["home_address_line2","VARCHAR(40)","pii"],
+    ["home_address_line3","VARCHAR(40)","pii"], ["home_city_name","VARCHAR(20)","pii"], ["home_state_code","VARCHAR(2)","pii"],
+    ["home_zip_code","VARCHAR(10)","pii"], ["home_phone_number","VARCHAR(10)","pii"], ["business_address_line1","VARCHAR(40)"],
+    ["business_address_line2","VARCHAR(40)"], ["business_address_line3","VARCHAR(40)"], ["business_city_name","VARCHAR(20)"],
+    ["business_state_code","VARCHAR(2)"], ["business_zip_code","VARCHAR(10)"], ["business_phone_number","VARCHAR(10)"],
+    ["marital_status_code","VARCHAR(1)"], ["sex","VARCHAR(7)"], ["birth_date","DATE","pii"], ["death_date","DATE"],
+    ["citizenship_indicator","VARCHAR(1)"], ["status_code","VARCHAR(1)"], ["final_date","DATE"], ["final_code","VARCHAR(3)"],
+    ["final_org_code","VARCHAR(5)"], ["current_appointment_date","DATE"], ["current_contract_date","DATE"],
+    ["manager_appointment_current_location_date","DATE"], ["nasd_suspension_code","VARCHAR(1)"], ["crd_number","VARCHAR(8)"],
+    ["business_telephone_number","VARCHAR(10)"], ["contract_prefix","VARCHAR(2)"], ["contract_type","VARCHAR(1)"],
+    ["contract_plan_code","VARCHAR(2)"], ["marketer_type_code","VARCHAR(1)"], ["marketer_subtype_code","VARCHAR(2)"],
+    ["second_line_management","JSONB (≤4)"], ["abbreviated_broker_name","VARCHAR(27)"], ["unit_manager_number","VARCHAR(6)"],
+    ["basic1_present","BOOLEAN"], ["basic1_home_fax_number","VARCHAR(10)"], ["basic1_business_fax_number","VARCHAR(10)"],
+    ["basic1_producer_contract_subtype_code","VARCHAR(2)"], ["basic1_management_contract_subtype_code","VARCHAR(2)"],
+    ["basic1_aos_rmo","VARCHAR(1)"], ["basic1_aos_region","VARCHAR(1)"], ["basic1_subject_id","BIGINT"],
+    ["basic1_org_initials","VARCHAR(3)"], ["basic1_era_indicator","BOOLEAN"], ["basic4_sections","JSONB (≤10)"]],
+    note: "Indexed on alternate_key_ssn_or_tin. JSONB trailers are a POC-only choice with no DB2 equivalent." },
+
+  // standalone control tables
+  T("sequence_counter", { zone: "ctl", legacy: "UTT_CTL", cols: [
+    ["counter_id","VARCHAR(8)","pk"], ["subject_id","BIGINT"], ["contract_number","VARCHAR(6)"], ...AUDIT, ["adb_create_date","DATE"]],
+    note: "Rows OFFICE, AGNTINIT, NODE, AGENCIES, PRUSEL generate org codes, initials, node ids and contract numbers." }),
+  T("ingestion_checkpoint", { zone: "ctl", legacy: "UTP27301 restart record", cols: [
+    ["cycle_date","VARCHAR(8)","pk"], ["source_file_path","VARCHAR(500)"], ["source_file_size","BIGINT"],
+    ["source_file_hash","VARCHAR(64)"], ["last_committed_position","BIGINT"], ...AUDIT],
+    note: "One row per feed date, for HR1 restart." }),
+  T("run_config", { zone: "ctl", legacy: "UTP27301 JCL PARM card", cols: [
+    ["config_key","VARCHAR(100)","pk"], ["config_value","VARCHAR(500)"], ["updated_by","VARCHAR(50)"], ["updated_ts","TIMESTAMP"]],
+    note: "Allowed keys: ingestion.company-name, ingestion.validate-file-date." }),
+  T("error_code", { zone: "ctl", legacy: "ERRORCD", cols: [
+    ["error_code","VARCHAR(5)","pk"], ["error_description","VARCHAR(120)"]]}),
+];
+
+// from = many side (or child), to = one side (or parent). card: "N:1" or "1:1"
+const EDGES = [
+  { kind: "fk", from: "organization.node_id", to: "node.node_id", card: "1:1" },
+  { kind: "fk", from: "contract.node_id", to: "node.node_id", card: "1:1" },
+  { kind: "fk", from: "organization.distribution_channel_code", to: "distribution_channel.distribution_channel_code", card: "N:1" },
+  { kind: "fk", from: "contract.firm_type_code", to: "firm_type.firm_type_code", card: "N:1" },
+  { kind: "fk", from: "contract_history.node_id", to: "contract.node_id", card: "N:1", note: "Before-image written on every contract update." },
+  { kind: "fk", from: "node_relationship.parent_node_id", to: "node.node_id", card: "N:1" },
+  { kind: "fk", from: "node_relationship.child_node_id", to: "node.node_id", card: "N:1" },
+  { kind: "fk", from: "node_relationship.relationship_status_code", to: "relationship_status.relationship_status_code", card: "N:1" },
+  { kind: "fk", from: "node_relationship_history.parent_node_id", to: "node.node_id", card: "N:1" },
+  { kind: "fk", from: "node_relationship_history.child_node_id", to: "node.node_id", card: "N:1" },
+  { kind: "fk", from: "person_designation.person_subject_id", to: "person.person_subject_id", card: "N:1" },
+  { kind: "fk", from: "person_designation.designation_code", to: "designation.designation_code", card: "N:1" },
+
+  { kind: "logical", from: "contract.subject_id", to: "firm.firm_subject_id", card: "N:1", note: "When entity_type is BD, LLE or HA." },
+  { kind: "logical", from: "contract.subject_id", to: "person.person_subject_id", card: "N:1", note: "When entity_type is INVESTMENT_PROFESSIONAL." },
+  { kind: "logical", from: "address.ssn_or_contract_number", to: "contract.pru_contract_number", card: "N:1", note: "BUSINESS, COMMISSION and MAILING addresses." },
+  { kind: "logical", from: "address.ssn_or_contract_number", to: "person.ssn", card: "N:1", note: "HOME addresses (IP only)." },
+  { kind: "logical", from: "activity_log_entry.pru_contract_or_org_code", to: "contract.pru_contract_number", card: "N:1", note: "Contract activity (AP00AP, MI00MI, RA00RA, TE00TE)." },
+  { kind: "logical", from: "activity_log_entry.pru_contract_or_org_code", to: "organization.org_code", card: "N:1", note: "Organization activity (ORO0OR, ORO2OR)." },
+  { kind: "logical", from: "contract.resident_state", to: "state_code.state_code", card: "N:1", note: "Validated in the application." },
+  { kind: "logical", from: "address.state_code", to: "state_code.state_code", card: "N:1", note: "Validated in the application." },
+  { kind: "logical", from: "contract.pru_contract_number", to: "legacy_oa_contract.contract_number", card: "1:1", note: "Uniqueness check only: a new number must not already exist in UTT_OA." },
+
+  { kind: "derived", from: "contract_record.contract_number", to: "contract.pru_contract_number", card: "1:1", note: "HR2 drops the leading character (6 → 5 chars)." },
+  { kind: "derived", from: "organization_record.contract_number", to: "organization.org_code", card: "1:1", note: "HR2 builds the org record keyed by org_code." },
+  { kind: "derived", from: "organization_record.subject_id", to: "organization.org_subject_id", card: "1:1", note: "Copied from organization.org_subject_id." },
+];
+
+// ---- Rendering ------------------------------------------------------------
+const byId = Object.fromEntries(TABLES.map(t => [t.id, t]));
+const COLLAPSE_OVER = 12;
+const expanded = new Set();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// columns referenced by an edge stay visible when a table is collapsed
+const edgeCols = new Set(EDGES.flatMap(e => [e.from, e.to]));
+
+function badgeHtml(flags) {
+  const f = (flags || "").split(/\s+/).filter(Boolean);
+  const map = { pk: ["PK","b-pk"], fk: ["FK","b-fk"], lk: ["LK","b-lk"], uq: ["UQ","b-uq"], pii: ["PII","b-pii"] };
+  return f.map(k => `<span class="badge ${map[k][1]}" title="${{pk:"Primary key",fk:"Foreign key",lk:"Logical key (no FK)",uq:"Unique",pii:"Sensitive data (PII)"}[k]}">${map[k][0]}</span>`).join("");
+}
+
+function tableHtml(t) {
+  const collapsible = t.cols.length > COLLAPSE_OVER;
+  const open = !collapsible || expanded.has(t.id);
+  const shown = open ? t.cols : t.cols.filter(c => /pk|fk|lk/.test(c[2] || "") || edgeCols.has(`${t.id}.${c[0]}`));
+  const hidden = t.cols.length - shown.length;
+  const rows = shown.map(([n, type, flags]) => `
+    <div class="row${/pk|fk/.test(flags || "") ? " key" : ""}" data-col="${t.id}.${n}">
+      <span class="cn" title="${esc(n)}">${esc(n)}</span><span class="badges">${badgeHtml(flags)}</span><span class="ct">${esc(type)}</span>
+    </div>`).join("");
+  const more = collapsible
+    ? `<button class="more" type="button" data-toggle="${t.id}">${open ? "Show key columns only" : `+ ${hidden} more columns`}</button>` : "";
+  return `
+    <div class="tbl ${t.zone}" id="t-${t.id}" data-table="${t.id}">
+      <div class="tbl-head">
+        <div class="tbl-name">${t.schema !== "public" ? `<span class="tbl-schema">${t.schema}.</span>` : ""}${esc(t.id)}</div>
+        <div class="tbl-legacy">${esc(t.legacy)} · ${t.cols.length} columns</div>
+      </div>
+      <div class="rows">${rows}</div>${more}
+      ${t.note ? `<div class="tbl-note">${esc(t.note)}</div>` : ""}
+    </div>`;
+}
+
+const ZONE_LABELS = { 0: "Lookups", 1: "Organization & contract", 2: "Node hierarchy", 3: "Firm, person & address", 4: "adsi_master schema" };
+
+function render() {
+  const grid = document.getElementById("grid");
+  let html = "";
+  for (let c = 0; c <= 4; c++) {
+    html += `<div class="col"><div class="zone-label">${ZONE_LABELS[c]}</div>` +
+      TABLES.filter(t => t.col === c).map(tableHtml).join("") + `</div>`;
+  }
+  grid.innerHTML = html;
+  document.getElementById("ctlGrid").innerHTML = TABLES.filter(t => t.zone === "ctl").map(tableHtml).join("");
+  drawEdges();
+}
+
+function anchor(colId) {
+  return document.querySelector(`#grid [data-col="${CSS.escape(colId)}"]`)
+      || document.getElementById("t-" + colId.split(".")[0]);
+}
+
+function drawEdges() {
+  const canvas = document.getElementById("canvas");
+  const svg = document.getElementById("edges");
+  const cr = canvas.getBoundingClientRect();
+  svg.setAttribute("width", canvas.scrollWidth);
+  svg.setAttribute("height", canvas.scrollHeight);
+
+  const sameColCount = {};
+  let out = "";
+  EDGES.forEach((e, i) => {
+    const a = anchor(e.from), b = anchor(e.to);
+    if (!a || !b) return;
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    const ay = ra.top + ra.height / 2 - cr.top, by = rb.top + rb.height / 2 - cr.top;
+    const acx = ra.left + ra.width / 2, bcx = rb.left + rb.width / 2;
+    let ax, bx, da, db, d;
+    if (Math.abs(acx - bcx) < 20) {
+      // same column: loop out on the right side
+      const key = Math.round(acx);
+      const n = sameColCount[key] = (sameColCount[key] || 0) + 1;
+      ax = ra.right - cr.left; bx = rb.right - cr.left; da = db = 1;
+      const loop = Math.max(ax, bx) + 18 + n * 12;
+      d = `M${ax} ${ay} H${loop - 8} Q${loop} ${ay} ${loop} ${ay + Math.sign(by - ay) * 8} V${by - Math.sign(by - ay) * 8} Q${loop} ${by} ${loop - 8} ${by} H${bx}`;
+    } else {
+      const lr = acx < bcx;
+      ax = (lr ? ra.right : ra.left) - cr.left; bx = (lr ? rb.left : rb.right) - cr.left;
+      da = lr ? 1 : -1; db = -da;
+      const pull = Math.max(40, Math.abs(bx - ax) * 0.45);
+      d = `M${ax} ${ay} C${ax + da * pull} ${ay} ${bx + db * pull} ${by} ${bx} ${by}`;
+    }
+    // cardinality marks: "from" end is many (or one for 1:1), "to" end is one
+    const mark = (x, y, dir, many) => many
+      ? `M${x + dir * 13} ${y} L${x} ${y - 6} M${x + dir * 13} ${y} L${x} ${y + 6} M${x + dir * 9} ${y - 6} V${y + 6}`
+      : `M${x + dir * 8} ${y - 6} V${y + 6} M${x + dir * 12} ${y - 6} V${y + 6}`;
+    const marks = mark(ax, ay, da, e.card !== "1:1") + " " + mark(bx, by, db, false);
+    const tables = `${e.from.split(".")[0]} ${e.to.split(".")[0]}`;
+    out += `<path class="edge ${e.kind}" data-edge="${i}" data-tables="${tables}" d="${d}"/>` +
+           `<path class="edge ${e.kind}" data-edge="${i}" data-tables="${tables}" d="${marks}" style="stroke-dasharray:none"/>`;
+  });
+  svg.innerHTML = out;
+}
+
+function renderRelList() {
+  const label = { fk: "Foreign key", logical: "Logical", derived: "HR2-derived" };
+  document.getElementById("relBody").innerHTML = EDGES.map((e, i) => `
+    <tr data-edge="${i}">
+      <td><span class="kind ${e.kind}">${label[e.kind]}</span></td>
+      <td><code>${esc(e.from)}</code></td>
+      <td><code>${esc(e.to)}</code></td>
+      <td>${e.card === "1:1" ? "one to one" : "many to one"}</td>
+      <td>${esc(e.note || "")}</td>
+    </tr>`).join("");
+}
+
+// ---- Interaction ------------------------------------------------------------
+const canvasEl = document.getElementById("canvas");
+function focusOn(tableIds, edgeIdx) {
+  canvasEl.classList.add("focus");
+  document.querySelectorAll("#grid .tbl").forEach(el => el.classList.toggle("hot", tableIds.includes(el.dataset.table)));
+  document.querySelectorAll("path.edge").forEach(p => {
+    const hit = edgeIdx != null ? p.dataset.edge === String(edgeIdx) : p.dataset.tables.split(" ").some(t => tableIds.includes(t));
+    p.classList.toggle("hot", hit);
+    if (hit && edgeIdx == null) p.dataset.tables.split(" ").forEach(t => document.getElementById("t-" + t)?.classList.add("hot"));
+  });
+}
+function clearFocus() {
+  canvasEl.classList.remove("focus");
+  document.querySelectorAll(".hot").forEach(el => el.classList.remove("hot"));
+}
+
+document.getElementById("grid").addEventListener("mouseover", ev => {
+  const t = ev.target.closest(".tbl"); if (t) focusOn([t.dataset.table]);
+});
+document.getElementById("grid").addEventListener("mouseleave", clearFocus);
+
+document.addEventListener("click", ev => {
+  const btn = ev.target.closest("[data-toggle]");
+  if (btn) {
+    const id = btn.dataset.toggle;
+    expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+    render(); return;
+  }
+  const tr = ev.target.closest("#relBody tr");
+  if (tr) {
+    const e = EDGES[tr.dataset.edge];
+    const ids = [e.from.split(".")[0], e.to.split(".")[0]];
+    focusOn(ids, tr.dataset.edge);
+    document.getElementById("t-" + ids[0]).scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    setTimeout(clearFocus, 3500);
+  }
+});
+
+const toggleAll = document.getElementById("toggleAll");
+toggleAll.addEventListener("click", () => {
+  const big = TABLES.filter(t => t.cols.length > COLLAPSE_OVER).map(t => t.id);
+  const allOpen = big.every(id => expanded.has(id));
+  big.forEach(id => allOpen ? expanded.delete(id) : expanded.add(id));
+  toggleAll.textContent = allOpen ? "Expand all columns" : "Collapse to key columns";
+  render();
+});
+
+window.addEventListener("resize", drawEdges);
+renderRelList();
+render();
+if (document.fonts) document.fonts.ready.then(drawEdges);
+</script>
+</body>
+</html>
