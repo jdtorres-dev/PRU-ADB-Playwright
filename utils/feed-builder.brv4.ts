@@ -125,14 +125,14 @@ export function buildProducer(
 
 export const Z_TRAILER = baseline()[5] ?? '';
 
-export function assembleFile(fileName: string, bundles: string[][]): { records: number; bundles: number } {
+export function assembleFile(fileName: string, bundles: string[][], feedDate: string = FEED_DATE): { records: number; bundles: number } {
   const [A0] = baseline();
   const body: string[] = [];
   for (const b of bundles) body.push(...b);
   const total = 1 + body.length;
   let A = A0;
   A = setf(A, 'A', 'WS-COMPANY-NAME', 'ALLSTATE');
-  A = setf(A, 'A', 'WS-TRANS-DATE', FEED_DATE);
+  A = setf(A, 'A', 'WS-TRANS-DATE', feedDate);
   A = setf(A, 'A', 'WS-TOT-REC-COUNT', String(total).padStart(12, '0'));
   const recs = [A, ...body];
   for (const r of recs) if (r.length !== RECLEN) throw new Error(`record wrong length in ${fileName}`);

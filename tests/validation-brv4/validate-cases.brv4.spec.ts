@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loadTestCasesBrv4 } from '../../utils/registry.brv4';
-import { readRunBrv4, recordVerdictBrv4 } from '../../utils/verdict-store.brv4';
+import { readRunBrv4, recordVerdictBrv4, recordBlockedUnlessDecidedBrv4 } from '../../utils/verdict-store.brv4';
 import { judgeBrv4 } from '../../utils/verdict-rules.brv4';
 import type { TestCaseBrv4 } from '../../utils/types.brv4';
 
@@ -21,13 +21,53 @@ import type { TestCaseBrv4 } from '../../utils/types.brv4';
  * checks[] against the artifacts its run actually produced.
  */
 
-const cases = loadTestCasesBrv4();
+const allCases = loadTestCasesBrv4();
+
+// Only feed-driven cases (executable, with a feed uploaded by
+// e2e-execute-brv4) are validated - and listed - here. The rest are either
+// not executable at all, or DB-verified cases with no feed, whose real
+// verdict comes from e2e-db-brv4; listing them only produced a wall of
+// skipped tests.
+const isFeedDriven = (tc: TestCaseBrv4) => tc.executable && tc.feeds.length > 0;
+const cases = allCases.filter(isFeedDriven);
+const hiddenCases = allCases.filter((tc) => !isFeedDriven(tc));
 
 function assertionFeed(tc: TestCaseBrv4) {
   return tc.feeds.find((f) => f.cls === 'assertion target') ?? tc.feeds[tc.feeds.length - 1];
 }
 
 test.describe('PRU ADB - BRv4 uncovered-rules validation', () => {
+  // Hidden cases still get their BLOCKED placeholder verdict (never
+  // overwriting a decided one), exactly as when they were listed, so the
+  // final report keeps covering every case.
+  test.beforeAll(() => {
+    for (const tc of hiddenCases) {
+      const feed = assertionFeed(tc);
+      recordBlockedUnlessDecidedBrv4({
+        testCaseId: tc.id,
+        rule: tc.rule,
+        topic: tc.topic,
+        priority: tc.priority,
+        feedFile: feed?.feed ?? '',
+        feedDate: '',
+        generation: null,
+        runId: '',
+        runStatus: '',
+        artifactZip: '',
+        verificationRoute: tc.verificationRoute,
+        automationEligibility: tc.automationEligibility,
+        expectedBusinessOutcome: tc.expectedBusinessOutcome,
+        expectedDataEffect: tc.expectedDataEffect,
+        dbVerificationRequired: tc.dbVerificationRequired,
+        dbVerificationNotes: tc.dbVerificationNotes,
+        actualSummary: '(not executed)',
+        checkResults: [],
+        verdict: 'BLOCKED',
+        notes: !tc.executable ? tc.blockedReason : `No run record for ${feed?.feed ?? ''}. Run --project=e2e-execute-brv4 first.`,
+      });
+    }
+  });
+
   for (const tc of cases) {
     const title = `${tc.id}  ${tc.rule}  ${tc.verificationRoute}`;
 
@@ -61,23 +101,10 @@ test.describe('PRU ADB - BRv4 uncovered-rules validation', () => {
         dbVerificationNotes: tc.dbVerificationNotes,
       };
 
-      if (!tc.executable) {
-        recordVerdictBrv4({
-          ...base,
-          actualSummary: '(not executed)',
-          checkResults: [],
-          verdict: 'BLOCKED',
-          notes: tc.blockedReason,
-        });
-        test.info().annotations.push({ type: 'verdict', description: 'BLOCKED' });
-        test.skip(true, tc.blockedReason);
-        return;
-      }
-
       const run = feedFile ? readRunBrv4(feedFile) : null;
 
       if (!run) {
-        recordVerdictBrv4({
+        recordBlockedUnlessDecidedBrv4({
           ...base,
           actualSummary: '(not executed)',
           checkResults: [],

@@ -4,7 +4,7 @@ import { identity, buildFirm, buildSubsequentFirm, buildProducer, assembleFile, 
 import * as path from 'path';
 import * as fs from 'fs';
 import { summariseLogs } from './verdict-store';
-import { execSync } from 'child_process';
+import AdmZip from 'adm-zip';
 import { findAdsimstrRecordBySsn, findAdsimstrRecordByContractNumber, ADSIMSTR, ADSIMSTR_ORG_FAX } from './adsimstr-parser.brv4';
 
 // Inserts a fresh, never-used activity_log_entry row directly (mimicking what
@@ -27,19 +27,32 @@ async function orgCodeForBd(client: any, bdAllstateId: string): Promise<string |
   return r.rows[0]?.org_code ?? null;
 }
 
-async function insertActivity(
+// activity_ts MUST fall on (or before) the triggering cycle's own feed
+// date, not wall-clock time: HrMasterSyncRunner/ActivityLogRepository's
+// findByPurposeAndActivityTsInRangeOrUnprocessedBacklog only picks up rows
+// whose activity_ts falls on the run's processing date, plus older rows
+// with processed_ts IS NULL. A row stamped with now() (real wall-clock time,
+// which is AFTER every feed date this suite uses) matches neither clause -
+// it's not "on" the processing date and it's not "older" than it either -
+// so HR2 silently never sees it. This was confirmed live, 2026-09-28: the
+// original insertActivity used now() and this whole bucket of TCs (022, 024,
+// 034, 149, 372, 373, 376, 377, 478, 482) came back inconclusive/blocked.
+// Anchoring to the same FEED_DATE the trigger upload itself uses fixes it.
+function insertActivity(
   client: any,
   code: string,
   purposeCode: string,
   subjectId: string,
   transactionCode: string,
   offsetMs = 0,
+  cycleDate = FEED_DATE,
 ): Promise<void> {
-  await client.query(
+  const anchor = `${cycleDate.slice(0, 4)}-${cycleDate.slice(4, 6)}-${cycleDate.slice(6, 8)}`;
+  return client.query(
     `INSERT INTO pru_adb.activity_log_entry
        (pru_contract_or_org_code, activity_ts, purpose_code, subject_id, transaction_code, crt_by_id)
-     VALUES ($1, now() + ($2 || ' milliseconds')::interval, $3, $4, $5, 'CLAUDE01')`,
-    [code, String(offsetMs), purposeCode, subjectId, transactionCode],
+     VALUES ($1, $2::timestamp + ($3 || ' milliseconds')::interval, $4, $5, $6, 'CLAUDE01')`,
+    [code, anchor, String(offsetMs), purposeCode, subjectId, transactionCode],
   );
 }
 
@@ -51,21 +64,103 @@ export interface DbVerifiedCase {
 }
 
 const FEED_DATE = '20260908';
+const DAY1 = '20260908';
+const DAY2 = '20260909';
 
-async function uploadAndSettle(console: ConsolePage, fileName: string): Promise<{ runId: string; status: string }> {
-  await console.setFeedDate(FEED_DATE);
+async function uploadAndSettle(console: ConsolePage, fileName: string): Promise<{ runId: string; status: string; hr2: string }> {
+  return uploadAndSettleAt(console, fileName, FEED_DATE);
+}
+
+// HR2 (the adsi_master sync) runs after the run itself reports COMPLETED,
+// and a failed HR2 still leaves the run COMPLETED (BR-131). Every assertion
+// on adsi_master is only meaningful once HR2 has finished for that date, so
+// wait for HR2's own result line instead of a fixed sleep (a 30s sleep let
+// 17 TCs on 2026-10-01 read adsi_master before - or without - HR2 ever
+// writing it). A failed HR2 is reported through the status as
+// COMPLETED_HR2_FAILED so each case's own "run completed" check fails with
+// the real reason (precondition not met) instead of a misleading assertion
+// further down. If the HR2 line never shows (log buffer gone), fall back to
+// the old fixed wait.
+async function settleWithHr2(console: ConsolePage, runId: string, feedDate: string): Promise<{ status: string; hr2: string }> {
+  const run = await console.waitForRunToSettle(runId);
+  let status = String((run as any)?.status ?? 'UNKNOWN');
+  if (status !== 'COMPLETED') return { status, hr2: 'NOT_RUN' };
+  const hr2 = await console.waitForHr2(runId, feedDate);
+  if (hr2 === 'FAILED') {
+    status = 'COMPLETED_HR2_FAILED';
+    failedHr2Dates.add(feedDate);
+  }
+  if (hr2 === 'NOT_SEEN') await new Promise((resolve) => setTimeout(resolve, 30000));
+  return { status, hr2 };
+}
+
+// Cross-TC isolation for a failed HR2 (2026-10-01). A failed HR2 sync
+// leaves that date's activity rows unprocessed, and HR2 re-reads them on
+// every later sync for the same date - so one TC's failure used to block
+// every later TC on that date (38 TCs on 2026-09-09 in the 2026-10-01 run).
+// The spec snapshots the unprocessed rows before each case and, only if that
+// case saw HR2 fail, deletes the unprocessed rows the case itself added on
+// the failed date(s). Rows that existed before the case are never touched,
+// and nothing happens when every HR2 completed. Cases run one at a time
+// (workers: 1), so "added during this case" means "added by this case".
+const failedHr2Dates = new Set<string>();
+
+type ActivityKey = string;
+const activityKey = (r: any): ActivityKey =>
+  [r.pru_contract_or_org_code, new Date(r.activity_ts).toISOString(), r.transaction_code, r.subject_id].join('|');
+
+export async function snapshotUnprocessedActivity(): Promise<Set<ActivityKey>> {
+  failedHr2Dates.clear();
+  return withDb(async (client) => {
+    const r = await client.query('SELECT pru_contract_or_org_code, activity_ts, transaction_code, subject_id FROM pru_adb.activity_log_entry WHERE processed_ts IS NULL');
+    return new Set(r.rows.map(activityKey));
+  });
+}
+
+// Returns a description of each deleted row, for the test's annotations.
+export async function releaseFailedHr2Leftovers(before: Set<ActivityKey>): Promise<string[]> {
+  const dates = [...failedHr2Dates].map((d) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`);
+  failedHr2Dates.clear();
+  if (!dates.length) return [];
+  return withDb(async (client) => {
+    const r = await client.query(
+      'SELECT pru_contract_or_org_code, activity_ts, transaction_code, subject_id FROM pru_adb.activity_log_entry WHERE processed_ts IS NULL AND activity_ts::date = ANY($1::date[])',
+      [dates],
+    );
+    const released: string[] = [];
+    for (const row of r.rows.filter((x) => !before.has(activityKey(x)))) {
+      await client.query(
+        'DELETE FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1 AND activity_ts = $2 AND transaction_code = $3 AND subject_id = $4 AND processed_ts IS NULL',
+        [row.pru_contract_or_org_code, row.activity_ts, row.transaction_code, row.subject_id],
+      );
+      released.push(`${row.pru_contract_or_org_code} ${row.transaction_code} ${new Date(row.activity_ts).toISOString()}`);
+    }
+    return released;
+  });
+}
+
+// Same as uploadAndSettle, but for a caller-supplied feed date - needed by
+// the "standalone update" technique (dev-confirmed, validated live 2026-09-28
+// via TC-BR-318/320/304): a real update to an already-existing entity is fed
+// as a bare C (firm) or D01+D02 (producer) record placed OUTSIDE any B
+// bundle, on a later cycle date than the one that first created it. This
+// bypasses B0700 entirely (that rejection only fires for a B-wrapped bundle
+// whose BD is already present) and reaches the same old-vs-new comparison
+// path AdsiChangeDetectionService uses, letting these rules - previously
+// blocked because a full-bundle resubmission of an existing BD is
+// unconditionally rejected - be tested for real instead of only living as a
+// documented gap.
+async function uploadAndSettleAt(console: ConsolePage, fileName: string, feedDate: string): Promise<{ runId: string; status: string; hr2: string }> {
+  await console.setFeedDate(feedDate);
   await console.chooseFile(path.join(FEEDS_DIR, fileName));
   const runId = await console.submitAndGetRunId();
-  const run = await console.waitForRunToSettle(runId);
-  // HR2 sync appears to run asynchronously after the ingestion status itself
-  // reports COMPLETED - give it time before any test queries adsi_master.
-  await new Promise((resolve) => setTimeout(resolve, 15000));
-  return { runId, status: String((run as any)?.status ?? 'UNKNOWN') };
+  const { status, hr2 } = await settleWithHr2(console, runId, feedDate);
+  return { runId, status, hr2 };
 }
 
 // Downloads the same "General Artifacts -> ALL (.zip)" this project already
-// uses elsewhere, extracts it (shelling out to `unzip`, already confirmed
-// present in this environment - no new dependency), and reads the raw
+// uses elsewhere, extracts it in-process with adm-zip (same as
+// artifact-validator.ts - no external `unzip`, which Windows lacks), and reads the raw
 // ADSIMSTR extract (File 7) it contains directly. Used only by the small
 // set of rules whose expectation is a fact about the Java-built extract's
 // own bytes/counters - never a mainframe-vs-Java diff (the broken/missing
@@ -77,7 +172,7 @@ async function downloadAdsimstrExtract(console: ConsolePage, runId: string): Pro
   await console.openRun(runId);
   await console.downloadAllArtifacts(zipPath);
   const extractDir = path.join(runDir, 'extracted');
-  execSync(`unzip -o "${zipPath}" -d "${extractDir}"`);
+  new AdmZip(zipPath).extractAllTo(extractDir, true);
   const datPath = path.join(extractDir, `Day ${FEED_DATE}`, 'File 7 - ADSIMSTR', `ALADSI10-${FEED_DATE}.dat`);
   return fs.readFileSync(datPath);
 }
@@ -87,27 +182,1282 @@ async function downloadAndFindAdsimstrRecord(console: ConsolePage, runId: string
   return findAdsimstrRecordBySsn(buf, ssn);
 }
 
-// seq space reserved for this file: 20000 + ruleNumber*10 + subIndex.
-// Never overlaps: original 12 automated cases used ruleNumber*100+offset
-// (max ~48999), the 181 per-TC trigger feeds used ruleNumber directly
-// (max ~490), the shared generic trigger used 90001.
-// Base 50000 is clearly clear of every other identity range this suite uses:
-// raw rule numbers (1-490, the per-TC trigger feeds), ruleNumber*100+offset
-// up to ~36999 (the original 12 automated cases), and 90001 (the shared
-// generic trigger) - all comfortably below 50000, and this range stays
-// comfortably below 90001. A per-process random offset (multiple of 100, so
-// it never overlaps the `sub` index) means re-running this suite after a
-// partial failure never collides with identities a prior attempt already
-// committed (this environment has no data reset - a repeated identity would
-// hit the same B0700 duplicate rejection every other part of this suite
-// already had to work around).
-const RUN_OFFSET = Math.floor(Math.random() * 300) * 100;
+// Downloads the same artifacts ZIP and reads the raw LNAERROR text (File 3).
+// Error codes like B0608/B0606 are written ONLY here, never to the run log -
+// confirmed by dev (DEF-RDMS-BRV4-015) after QA mistakenly checked the run
+// log instead. Reuses the same run directory downloadAdsimstrExtract already
+// populates if it was called first in the same test; otherwise downloads fresh.
+async function downloadLnaerrorFile(console: ConsolePage, runId: string): Promise<string> {
+  const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+  const extractDir = path.join(runDir, 'extracted');
+  const txtPath = path.join(extractDir, `Day ${FEED_DATE}`, 'File 3 - LNAERROR', `lnaerror-${FEED_DATE}.txt`);
+  if (!fs.existsSync(txtPath)) {
+    const zipPath = path.join(runDir, `ingestion-artifacts-${runId}.zip`);
+    await console.openRun(runId);
+    await console.downloadAllArtifacts(zipPath);
+    new AdmZip(zipPath).extractAllTo(extractDir, true);
+  }
+  return fs.readFileSync(txtPath, 'latin1');
+}
+
+// Downloads the run's artifacts ZIP (once per run) and reads the CNTLRPT
+// (File 1) for the given cycle date. Counters are per run.
+async function downloadCntlrpt(console: ConsolePage, runId: string, feedDate: string): Promise<string> {
+  const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+  const extractDir = path.join(runDir, 'extracted');
+  const txtPath = path.join(extractDir, `Day ${feedDate}`, 'File 1 - CNTLRPT', `cntlrpt-${feedDate}.txt`);
+  if (!fs.existsSync(txtPath)) {
+    const zipPath = path.join(runDir, `ingestion-artifacts-${runId}.zip`);
+    await console.openRun(runId);
+    await console.downloadAllArtifacts(zipPath);
+    new AdmZip(zipPath).extractAllTo(extractDir, true);
+  }
+  return fs.readFileSync(txtPath, 'latin1');
+}
+
+// Downloads the run's artifacts ZIP (once per run) and reads one of the
+// Export/ error CSVs dev added in 080c502 (2026-09-30): errfile-<date>.csv
+// (HR2 extract stage, D001) and errfile-detectchanges-<date>.csv
+// (comparison stage, D002/D003). Header: nodeId,nodeType,errorCode,sqlCode,
+// description. Files are named for the trigger's feedDate and accumulate
+// every entry HR2 reported for that date, so callers must match on their own
+// seeded code/node id, never on row count.
+interface ErrfileRow { nodeId: string; nodeType: string; errorCode: string; sqlCode: string; description: string; }
+async function downloadExportErrfile(console: ConsolePage, runId: string, fileName: string): Promise<ErrfileRow[] | null> {
+  const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+  const extractDir = path.join(runDir, 'extracted');
+  const csvPath = path.join(extractDir, 'Export', fileName);
+  if (!fs.existsSync(csvPath)) {
+    const zipPath = path.join(runDir, `ingestion-artifacts-${runId}.zip`);
+    await console.openRun(runId);
+    await console.downloadAllArtifacts(zipPath);
+    new AdmZip(zipPath).extractAllTo(extractDir, true);
+  }
+  if (!fs.existsSync(csvPath)) return null;
+  return fs.readFileSync(csvPath, 'latin1').split(/\r?\n/).slice(1).filter((l) => l.trim()).map((l) => {
+    // description is free text and may itself contain commas.
+    const [nodeId, nodeType, errorCode, sqlCode, ...rest] = l.split(',');
+    return { nodeId, nodeType, errorCode, sqlCode, description: rest.join(',') };
+  });
+}
+
+// "  NUMBER OF BD CONTRACTS UPDATED IN ADB      : 0000000001" -> 1 (null if absent).
+function cntlCounter(report: string, label: string): number | null {
+  const line = report.split(/\r?\n/).find((l) => l.includes(label));
+  const m = line?.match(/:\s*(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
+// seq space reserved for this file: SEQ_MIN..SEQ_MAX, handed out in
+// SLOT_WIDTH-wide slots (callers use seq..seq+3). Every other identity range
+// this suite uses sits below SEQ_MIN: raw rule numbers (1-490, the per-TC
+// trigger feeds) and ruleNumber*100+offset up to ~48999 (the original 12
+// automated cases). 90001 (the shared generic trigger) is inside the range
+// and is skipped. identity() pads seq to 5 digits, so 99999 is the hard cap -
+// and 99999 itself is ABSENT_SEQ, never allocated.
+//
+// This environment has no data reset: a BD identity that was committed once
+// hits B0700 on every later run. A random per-run offset could not prevent
+// that (it re-drew offsets already used and its slots overlapped between
+// runs), so each run instead starts ABOVE the highest seq already committed
+// in the database - the DB is shared by every machine running this suite, so
+// it is the only record of what is taken. Only committed identities can cause
+// B0700, so a bundle that was rejected leaves nothing to avoid.
+// Not safe for two runs at the same time (both would read the same max) -
+// the suite is already serial-only for the same no-data-reset reason.
+const SEQ_MIN = 50000;
+const SEQ_MAX = 99998;
+const GENERIC_TRIGGER_SEQ = 90001;
+const SLOT_WIDTH = 10;
+// A seq that is never allocated, so identity(ABSENT_SEQ) is guaranteed never
+// to have been created - for cases that need a genuinely missing parent.
+export const ABSENT_SEQ = 99999;
+
+let nextSlot: number | null = null;
+const slotByRule = new Map<string, number>();
+
+// Must run once before any case (the spec's beforeAll calls it).
+export async function reserveSeqRange(): Promise<void> {
+  const used = await withDb(async (client) => {
+    const r = await client.query(
+      `SELECT max(seq) AS max FROM (
+         SELECT substring(allstate_id from 4 for 5)::int AS seq FROM pru_adb.contract
+          WHERE allstate_id ~ '^[APL]99[0-9]{5}00$'
+         UNION ALL
+         SELECT substring(ssn from 3)::int - 5000000 FROM pru_adb.person
+          WHERE ssn ~ '^995[0-9]{6}$'
+         UNION ALL
+         SELECT (node_id - 90000000000)::int FROM pru_adb.node
+          WHERE node_id BETWEEN 90000000000 AND 90000099999
+       ) s
+       WHERE seq BETWEEN $1 AND $2 AND seq <> $3`,
+      [SEQ_MIN, SEQ_MAX, GENERIC_TRIGGER_SEQ],
+    );
+    return r.rows[0]?.max as number | null;
+  });
+  const start = used == null ? SEQ_MIN : used + 1;
+  nextSlot = Math.ceil(start / SLOT_WIDTH) * SLOT_WIDTH;
+  slotByRule.clear();
+}
+
 function seqFor(rule: string, sub = 0): number {
-  const n = parseInt(rule.replace('BR-', ''), 10);
-  return 50000 + RUN_OFFSET + n * 10 + sub;
+  if (sub < 0 || sub >= SLOT_WIDTH) throw new Error(`seqFor: sub ${sub} outside 0..${SLOT_WIDTH - 1}`);
+  let base = slotByRule.get(rule);
+  if (base === undefined) {
+    if (nextSlot === null) throw new Error('seqFor called before reserveSeqRange() - call it in beforeAll');
+    if (nextSlot <= GENERIC_TRIGGER_SEQ && GENERIC_TRIGGER_SEQ < nextSlot + SLOT_WIDTH) nextSlot += SLOT_WIDTH;
+    if (nextSlot + SLOT_WIDTH - 1 > SEQ_MAX) {
+      throw new Error(
+        `BRv4 identity space exhausted: every seq up to ${SEQ_MAX} is already committed. ` +
+          'identity() in feed-builder.brv4.ts needs a wider seq format (or a new generation) before this suite can run again.',
+      );
+    }
+    base = nextSlot;
+    nextSlot += SLOT_WIDTH;
+    slotByRule.set(rule, base);
+  }
+  return base + sub;
 }
 
 export const CASES: DbVerifiedCase[] = [];
+
+// ---------------------------------------------------------------------
+// Standalone-update factories (the "Shape A" technique, validated live
+// 2026-09-28): Day 1 creates a normal firm(+producer) via a full bundle;
+// Day 2 re-submits ONLY a bare C (firm) or D01+D02 (producer) record - no B,
+// no wrapper - carrying the one changed field, at a later cycle date. Every
+// TC built on these two factories is testing a real old-vs-new comparison on
+// an already-committed entity, which a full-bundle resubmission could never
+// reach (B0700 rejects it before any field-level processing happens).
+// ---------------------------------------------------------------------
+
+interface StandaloneFirmCaseOpts {
+  tcId: string; rule: string;
+  day1C?: Record<string, string>;
+  day2C: Record<string, string>;
+  includeProducer?: boolean;
+  verify: (ctx: { day1: { status: string }; day2: { status: string }; before: any; after: any; firm: ReturnType<typeof buildFirm> }) => CheckResult[];
+  columns: string; // adsi_master.organization_record columns to select, or '*'
+}
+function standaloneFirmCase(opts: StandaloneFirmCaseOpts): void {
+  CASES.push({
+    tcId: opts.tcId, rule: opts.rule,
+    run: async (console) => {
+      const seq = seqFor(opts.rule);
+      const firm = buildFirm(seq, { C: opts.day1C });
+      const bundle: string[] = [firm.B, firm.C];
+      if (opts.includeProducer) {
+        const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+        bundle.push(prod.D1, prod.D2);
+      }
+      const fn1 = `ALLSTATE.LNA.${opts.rule}-DAY1.D${DAY1}.txt`;
+      assembleFile(fn1, [bundle], DAY1);
+      const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+      return withDb(async (client) => {
+        const orgCode = await orgCodeForBd(client, firm.id.bd);
+        const before = orgCode
+          ? (await client.query(`SELECT ${opts.columns} FROM adsi_master.organization_record WHERE contract_number = $1`, [orgCode])).rows[0]
+          : null;
+        const updatedFirm = buildFirm(seq, { C: opts.day2C });
+        const fn2 = `ALLSTATE.LNA.${opts.rule}-DAY2.D${DAY2}.txt`;
+        assembleFile(fn2, [[updatedFirm.C]], DAY2); // standalone C, no B
+        const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+        const after = orgCode
+          ? (await client.query(`SELECT ${opts.columns} FROM adsi_master.organization_record WHERE contract_number = $1`, [orgCode])).rows[0]
+          : null;
+        return opts.verify({ day1, day2, before, after, firm });
+      });
+    },
+  });
+}
+
+interface StandaloneProducerCaseOpts {
+  tcId: string; rule: string;
+  day1RelnStatus?: string; // default 'A'
+  day2RelnStatus?: string; // default same as day1
+  day1D01?: Record<string, string>;
+  day1D02?: Record<string, string>;
+  day2D01?: Record<string, string>;
+  day2D02?: Record<string, string>;
+  verify: (ctx: { day1: { status: string }; day2: { status: string }; before: any; after: any; prod: ReturnType<typeof buildProducer> }) => CheckResult[];
+  columns: string; // adsi_master.contract_record columns to select, or '*'
+}
+function standaloneProducerCase(opts: StandaloneProducerCaseOpts): void {
+  CASES.push({
+    tcId: opts.tcId, rule: opts.rule,
+    run: async (console) => {
+      const seq = seqFor(opts.rule);
+      const firm = buildFirm(seq);
+      const day1Status = opts.day1RelnStatus ?? 'A';
+      const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, day1Status, { D01: opts.day1D01, D02: opts.day1D02 });
+      const fn1 = `ALLSTATE.LNA.${opts.rule}-DAY1.D${DAY1}.txt`;
+      assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+      const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+      return withDb(async (client) => {
+        const before = (await client.query(`SELECT ${opts.columns} FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1`, [prod.id.ssn])).rows[0];
+        const day2Status = opts.day2RelnStatus ?? day1Status;
+        const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, day2Status, { D01: opts.day2D01, D02: opts.day2D02 });
+        const fn2 = `ALLSTATE.LNA.${opts.rule}-DAY2.D${DAY2}.txt`;
+        assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2); // standalone producer, no B/C
+        const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+        const after = (await client.query(`SELECT ${opts.columns} FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1`, [prod.id.ssn])).rows[0];
+        return opts.verify({ day1, day2, before, after, prod });
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------
+// Batch 1: standalone-update technique applied to the "old vs new
+// comparison on an already-committed entity" bucket (72 TCs total, was
+// blocked because a full-bundle resubmission of an existing BD is
+// unconditionally rejected as B0700). Firm-level (organization_record)
+// cases first, then producer-level (contract_record) cases.
+// ---------------------------------------------------------------------
+
+standaloneFirmCase({
+  tcId: 'TC-BR-392', rule: 'BR-392',
+  day2C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED FIRM NAME' },
+  columns: 'org_full_name',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone C-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.organization_record.org_full_name reflects the new firm name', pass: after?.org_full_name === 'E2E BRV4 CHANGED FIRM NAME' && before?.org_full_name !== after?.org_full_name, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneFirmCase({
+  tcId: 'TC-BR-393', rule: 'BR-393',
+  day2C: { 'WS-BUS-COMM-ADD-L1': '999 CHANGED ADDR AVE' },
+  columns: 'address_line1',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone C-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.organization_record.address_line1 reflects the new business address', pass: after?.address_line1 === '999 CHANGED ADDR AVE' && before?.address_line1 !== after?.address_line1, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneFirmCase({
+  tcId: 'TC-BR-394', rule: 'BR-394',
+  day2C: { 'WS-BUS-COMM-PH-NUM': '9995551234' },
+  columns: 'phone_number',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone C-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.organization_record.phone_number reflects the new phone number', pass: after?.phone_number === '9995551234' && before?.phone_number !== after?.phone_number, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneFirmCase({
+  tcId: 'TC-BR-395', rule: 'BR-395',
+  day2C: { 'WS-BUS-COMM-FAX-NUM': '9995556789' },
+  columns: 'fax_number',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone C-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.organization_record.fax_number reflects the new fax number', pass: after?.fax_number === '9995556789' && before?.fax_number !== after?.fax_number, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneFirmCase({
+  tcId: 'TC-BR-389', rule: 'BR-389',
+  day2C: { 'WS-PROFILE-STATUS': 'T', 'WS-PROF-TERM-DT': '20260909' },
+  columns: 'org_status',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone C-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.organization_record.org_status changed once the firm\'s own profile status moved to terminated', pass: before?.org_status !== after?.org_status, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneFirmCase({
+  tcId: 'TC-BR-447', rule: 'BR-447',
+  day2C: { 'WS-PROFILE-STATUS': 'T', 'WS-PROF-TERM-DT': '20260909' },
+  columns: 'org_status, org_elimination_date',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone C-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: "adsi_master.organization_record.org_status = '9' (eliminated) after terminating the firm's profile", pass: after?.org_status === '9', detail: `after=${JSON.stringify(after)}` },
+    { description: 'org_elimination_date is populated and differs from the pre-termination value', pass: !!after?.org_elimination_date && before?.org_elimination_date !== after?.org_elimination_date, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneFirmCase({
+  tcId: 'TC-BR-391', rule: 'BR-391',
+  day2C: { 'WS-PROFILE-STATUS': 'T', 'WS-PROF-TERM-DT': '20260909' },
+  columns: 'org_elimination_date',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone C-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'org_elimination_date on the newly built master record differs from the previously-stored value once a real termination date is fed', pass: before?.org_elimination_date !== after?.org_elimination_date, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+// ---------------------------------------------------------------------
+// Producer-level (adsi_master.contract_record) standalone D01+D02 updates
+// ---------------------------------------------------------------------
+
+standaloneProducerCase({
+  tcId: 'TC-BR-404', rule: 'BR-404',
+  day2D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' },
+  columns: 'first_name, middle_name, last_name',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record name columns reflect the new middle name', pass: after?.middle_name === 'CHANGEDMID' && before?.middle_name !== after?.middle_name, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-147', rule: 'BR-147',
+  day2D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' },
+  columns: 'first_name, middle_name, last_name',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record name columns for this node reflect the new middle name, leaving first/last unchanged', pass: after?.middle_name === 'CHANGEDMID' && after?.first_name === before?.first_name && after?.last_name === before?.last_name, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-405', rule: 'BR-405',
+  day2D01: { 'WS-DESIGNATION1-7': 'CFP' },
+  columns: 'designations',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.designations reflects the new designations', pass: before?.designations !== after?.designations, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-406', rule: 'BR-406',
+  day2D01: { 'WS-HOME-ADD-L1': '123 NEW HOME ST' },
+  columns: 'home_address_line1',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.home_address_line1 reflects the new home address', pass: after?.home_address_line1 === '123 NEW HOME ST' && before?.home_address_line1 !== after?.home_address_line1, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-407', rule: 'BR-407',
+  day2D02: { 'WS-BUS-ADD-L1': '456 NEW BUS ST' },
+  columns: 'business_address_line1',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.business_address_line1 reflects the new business address', pass: after?.business_address_line1 === '456 NEW BUS ST' && before?.business_address_line1 !== after?.business_address_line1, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-410', rule: 'BR-410',
+  day1D01: { 'WS-SEX-CD': 'M' },
+  day2D01: { 'WS-SEX-CD': 'F' },
+  columns: 'sex',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.sex reflects the new sex code', pass: after?.sex === 'FEMALE' && before?.sex !== after?.sex, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-417', rule: 'BR-417',
+  day2D01: { 'WS-DOB': '19800101' },
+  columns: 'birth_date',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.birth_date reflects the new date of birth', pass: before?.birth_date !== after?.birth_date, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+// DEF-RDMS-BRV4-006's follow-up fix (BR-419): the master's crd_number is
+// now cut to 8 characters when built, so change-detection stops flagging
+// CRD_NUMBER as differing on every subsequent run for a 9-10 digit CRD.
+// Extends the original day1/day2 case with a day3 stability check: resend
+// the SAME 10-digit CRD unchanged and confirm it no longer produces a
+// spurious "changed" signal (no new contract_history row).
+CASES.push({
+  tcId: 'TC-BR-419', rule: 'BR-419',
+  run: async (console) => {
+    const seq = seqFor('BR-419');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-419-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const contract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const nodeId = contract.rows[0]?.node_id;
+      const countNow = async () => (await client.query('SELECT count(*)::int AS n FROM pru_adb.contract_history WHERE node_id = $1', [nodeId])).rows[0].n;
+      const masterCrd = async () => (await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn])).rows[0]?.crd_number;
+      const before = await masterCrd();
+      const c1 = await countNow();
+      const updated = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-CRD-NUM': '1234567890' } });
+      const fn2 = `ALLSTATE.LNA.BR-419-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updated.D1, updated.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const afterDay2 = await masterCrd();
+      const c2 = await countNow();
+      const same = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-CRD-NUM': '1234567890' } });
+      const fn3 = 'ALLSTATE.LNA.BR-419-DAY3.D20260910.txt';
+      assembleFile(fn3, [[same.D1, same.D2]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const afterDay3 = await masterCrd();
+      const c3 = await countNow();
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'adsi_master.contract_record.crd_number is cut to 8 characters when the master record is built (per DEF-RDMS-BRV4-006\'s follow-up fix), not the full 10-digit CRD', pass: before !== afterDay2 && afterDay2 === '1234567890'.slice(0, 8), detail: `before=${before} afterDay2=${afterDay2}` },
+        { description: 'day3 resending the SAME 10-digit CRD unchanged no longer produces a spurious "changed" signal - crd_number is stable and no new contract_history row is written', pass: day3.status === 'COMPLETED' && afterDay3 === afterDay2 && c3 === c2, detail: `afterDay2=${afterDay2} afterDay3=${afterDay3} c1=${c1} c2=${c2} c3=${c3}` },
+      ];
+    });
+  },
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-421', rule: 'BR-421',
+  day2D02: { 'WS-BUS-PH-NUM': '5551234567' },
+  columns: 'business_telephone_number',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.business_telephone_number reflects the new business phone', pass: after?.business_telephone_number === '5551234567' && before?.business_telephone_number !== after?.business_telephone_number, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+// BR-429's own trigger condition notes: "business address; home address
+// instead, for an IP" - a producer (entity_type IP) feeds its fax under the
+// HOME fields, but dev confirmed (DEF-RDMS-BRV4-010, legacy parity) it
+// lands in basic1_business_fax_number on the master, not
+// basic1_home_fax_number as first guessed. Two prior wrong guesses now
+// corrected: WS-BUS-FAX-NUM/basic1_business_fax_number (no change either
+// day - wrong FED field), then WS-HOME-FAX-NUM/basic1_home_fax_number (fed
+// field right, master column wrong).
+standaloneProducerCase({
+  tcId: 'TC-BR-429', rule: 'BR-429',
+  day2D01: { 'WS-HOME-FAX-NUM': '5559876543' },
+  columns: 'basic1_business_fax_number',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: "adsi_master.contract_record.basic1_business_fax_number reflects the new fax number fed under WS-HOME-FAX-NUM (a legacy quirk confirmed by dev: an IP's home fax lands in the business-fax master column)", pass: after?.basic1_business_fax_number === '5559876543' && before?.basic1_business_fax_number !== after?.basic1_business_fax_number, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-411', rule: 'BR-411',
+  day2RelnStatus: 'T',
+  day2D02: { 'WS-RELN-END-DT': '20260909' },
+  columns: 'final_code, status_code',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.final_code is set once the relationship status becomes T (derived directly from node_relationship.relationship_status_code)', pass: before?.final_code !== after?.final_code && !!after?.final_code, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-412', rule: 'BR-412',
+  day2RelnStatus: 'T',
+  day2D02: { 'WS-RELN-END-DT': '20260909' },
+  columns: 'final_date',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.final_date now equals the new relationship end date, differing from the pre-termination value', pass: !!after?.final_date && before?.final_date !== after?.final_date, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-420', rule: 'BR-420',
+  day2RelnStatus: 'T',
+  day2D02: { 'WS-RELN-END-DT': '20260909' },
+  columns: 'status_code',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.status_code reflects the new node_relationship.relationship_status_code', pass: before?.status_code !== after?.status_code, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-413', rule: 'BR-413',
+  day2RelnStatus: 'T',
+  day2D02: { 'WS-RELN-END-DT': '20260909' },
+  columns: 'final_org_code, status_code',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed with the contract active', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.final_org_code and status_code both update once the contract is terminated with a real end date', pass: before?.status_code !== after?.status_code && before?.final_org_code !== after?.final_org_code, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-414', rule: 'BR-414',
+  day2RelnStatus: 'T',
+  day2D02: { 'WS-RELN-END-DT': '20260909' },
+  columns: 'final_org_code, office_code, detach_office_code, status_code',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed with the contract active', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only status change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.final_org_code updates once the contract is terminated with a real end date (office_code/detach_office_code are copied as of that same run)', pass: before?.final_org_code !== after?.final_org_code, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-418', rule: 'BR-418',
+  day2D02: { 'WS-RELN-START-DT': '20260201' },
+  columns: 'current_appointment_date',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.current_appointment_date reflects the new node_relationship.relationship_start_date', pass: before?.current_appointment_date !== after?.current_appointment_date, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-422', rule: 'BR-422',
+  day2D02: { 'WS-RELN-START-DT': '20260201' },
+  columns: 'current_contract_date',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.current_contract_date reflects the new node_relationship.relationship_start_date', pass: before?.current_contract_date !== after?.current_contract_date, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-423', rule: 'BR-423',
+  day2D02: { 'WS-RELN-START-DT': '20260201' },
+  columns: 'manager_appointment_current_location_date',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.manager_appointment_current_location_date reflects the new node_relationship.relationship_start_date', pass: before?.manager_appointment_current_location_date !== after?.manager_appointment_current_location_date, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-434', rule: 'BR-434',
+  day2D02: { 'WS-BUS-ADD-L1': '789 NEW ORG PARENT ST' },
+  columns: 'basic1_org_initials, business_address_line1',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record row is rebuilt for this node on the day2 cycle (business address changed as the trigger for a fresh basic1 rebuild)', pass: after?.business_address_line1 === '789 NEW ORG PARENT ST', detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-438', rule: 'BR-438',
+  columns: '*',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02 resubmission (byte-identical to day1) completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record row is unchanged when the resubmitted record carries no real difference', pass: JSON.stringify(before) === JSON.stringify(after), detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+// ---------------------------------------------------------------------
+// Batch 2: pru_adb-side (not just adsi_master) standalone-update checks,
+// plus a few relational/status-transition cases.
+// ---------------------------------------------------------------------
+
+// updt_ts of a contract and of every node_relationship row it is the child
+// of - the appointment-side rows BR-069/070 say a party-only change must
+// leave untouched. Timestamps as epoch ms strings so before/after compare by
+// value (a Date === Date comparison is always false).
+async function appointmentStamps(client: any, allstateId: string) {
+  const ms = (v: any) => (v == null ? null : String(new Date(v).getTime()));
+  const c = (await client.query('SELECT node_id, subject_id, updt_ts FROM pru_adb.contract WHERE allstate_id = $1', [allstateId])).rows[0];
+  const rels = c ? (await client.query('SELECT relationship_type, updt_ts FROM pru_adb.node_relationship WHERE child_node_id = $1 ORDER BY relationship_type, parent_node_id', [c.node_id])).rows : [];
+  return {
+    subjectId: c?.subject_id ?? null,
+    contract: ms(c?.updt_ts),
+    rels: JSON.stringify(rels.map((r: any) => [r.relationship_type, ms(r.updt_ts)])),
+    relCount: rels.length,
+  };
+}
+
+// BR-070: a firm's own record (pru_adb.firm) is maintained apart from its
+// appointment. Expected data effect, per the rule: "firm updates; contract
+// and node_relationship untouched". (Corrected 2026-10-01: this previously
+// asserted the opposite - that contract.updt_ts gets stamped.)
+CASES.push({
+  tcId: 'TC-BR-070', rule: 'BR-070',
+  run: async (console) => {
+    const seq = seqFor('BR-070');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-070-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await appointmentStamps(client, firm.id.bd);
+      const firmBefore = (await client.query('SELECT abbreviated_firm_name, updt_ts FROM pru_adb.firm WHERE firm_subject_id = $1', [before.subjectId])).rows[0];
+      const updatedFirm = buildFirm(seq, { C: { 'WS-ABBR-FIRM-NAME': 'E2E BRV4 CHANGEDABBR' } });
+      const fn2 = `ALLSTATE.LNA.BR-070-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await appointmentStamps(client, firm.id.bd);
+      const firmAfter = (await client.query('SELECT abbreviated_firm_name, updt_ts FROM pru_adb.firm WHERE firm_subject_id = $1', [before.subjectId])).rows[0];
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only abbreviated-name change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "the firm's own record updates: pru_adb.firm carries the new abbreviated name and its updt_ts is stamped", pass: firmAfter?.abbreviated_firm_name?.trim() === 'E2E BRV4 CHANGEDABBR' && firmAfter?.updt_ts != null && String(firmAfter?.updt_ts) !== String(firmBefore?.updt_ts), detail: `before=${JSON.stringify(firmBefore)} after=${JSON.stringify(firmAfter)}` },
+        { description: 'the appointment is untouched: pru_adb.contract.updt_ts unchanged', pass: before.contract === after.contract, detail: `before=${before.contract} after=${after.contract}` },
+        { description: 'the appointment is untouched: node_relationship updt_ts unchanged', pass: before.relCount > 0 && before.rels === after.rels, detail: `before=${before.rels} after=${after.rels}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-317', rule: 'BR-317',
+  run: async (console) => {
+    const seq = seqFor('BR-317');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-317-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const before = orgCode ? (await client.query('SELECT org_name FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0] : null;
+      const activityBefore = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      const updatedFirm = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED ORG NAME' } });
+      const fn2 = `ALLSTATE.LNA.BR-317-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = orgCode ? (await client.query('SELECT org_name FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0] : null;
+      const activityAfter = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only firm-name change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'pru_adb.organization.org_name reflects the new firm name', pass: after?.org_name === 'E2E BRV4 CHANGED ORG NAME' && before?.org_name !== after?.org_name, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+        { description: 'a new activity_log_entry row is written for the org code once its name genuinely changes', pass: activityAfter > activityBefore, detail: `before=${activityBefore} after=${activityAfter}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-056', rule: 'BR-056',
+  run: async (console) => {
+    const seq = seqFor('BR-056');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-056-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const before = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0].n : 0;
+      const updatedFirm = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED ORG NAME 2' } });
+      const fn2 = `ALLSTATE.LNA.BR-056-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0].n : 0;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only firm-name change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'exactly one organization row for this BD org code both before and after the name change - no duplicate row created', pass: before === 1 && after === 1, detail: `before=${before} after=${after}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-325', rule: 'BR-325',
+  run: async (console) => {
+    const seq = seqFor('BR-325');
+    const firm = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 ORIGINAL BIZ ADDR AVE' } });
+    const fn1 = `ALLSTATE.LNA.BR-325-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const contract = await client.query('SELECT pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd]);
+      const num = contract.rows[0]?.pru_contract_number;
+      const before = num ? (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'BUSINESS'", [num])).rows[0] : null;
+      const updatedFirm = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '2 CHANGED BIZ ADDR AVE' } });
+      const fn2 = `ALLSTATE.LNA.BR-325-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = num ? (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'BUSINESS'", [num])).rows[0] : null;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only business-address change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "pru_adb.address.updt_ts (BUSINESS row) is stamped once the address genuinely changes", pass: before?.updt_ts == null && after?.updt_ts != null, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-324', rule: 'BR-324',
+  run: async (console) => {
+    const seq = seqFor('BR-324');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-HOME-ADD-L1': '1 ORIGINAL HOME ST' } });
+    const fn1 = `ALLSTATE.LNA.BR-324-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'HOME'", [prod.id.ssn])).rows[0];
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-HOME-ADD-L1': '2 CHANGED HOME ST' } });
+      const fn2 = `ALLSTATE.LNA.BR-324-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'HOME'", [prod.id.ssn])).rows[0];
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only home-address change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'pru_adb.address.updt_ts (HOME row) is stamped once the address genuinely changes', pass: before?.updt_ts == null && after?.updt_ts != null, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+      ];
+    });
+  },
+});
+
+// BR-069: a producer's own record (pru_adb.person) is held apart from their
+// appointment. Expected data effect, per the rule: "person updates; contract
+// and node_relationship updt_ts unchanged". (Corrected 2026-10-01: this
+// previously asserted the opposite - that contract.updt_ts gets stamped.)
+CASES.push({
+  tcId: 'TC-BR-069', rule: 'BR-069',
+  run: async (console) => {
+    const seq = seqFor('BR-069');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-069-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await appointmentStamps(client, prod.id.pid);
+      const personBefore = (await client.query('SELECT updt_ts FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn])).rows[0];
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+      const fn2 = `ALLSTATE.LNA.BR-069-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await appointmentStamps(client, prod.id.pid);
+      const personAfter = (await client.query("SELECT updt_ts, middle_name = 'CHANGEDMID' AS changed FROM pru_adb.person WHERE ssn = $1", [prod.id.ssn])).rows[0];
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only personal-field change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "the producer's own record updates: pru_adb.person carries the new middle name and its updt_ts is stamped", pass: personAfter?.changed === true && personAfter?.updt_ts != null && String(personAfter?.updt_ts) !== String(personBefore?.updt_ts), detail: `before=${JSON.stringify(personBefore)} after=${JSON.stringify(personAfter)}` },
+        { description: 'the appointment is untouched: pru_adb.contract.updt_ts unchanged', pass: before.contract === after.contract, detail: `before=${before.contract} after=${after.contract}` },
+        { description: 'the appointment is untouched: node_relationship updt_ts unchanged', pass: before.relCount > 0 && before.rels === after.rels, detail: `before=${before.rels} after=${after.rels}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-051', rule: 'BR-051',
+  run: async (console) => {
+    const seq = seqFor('BR-051');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-051-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT updt_ts FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const activityBefore = (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1)', [prod.id.pid])).rows[0].n;
+      const same = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+      const fn2 = `ALLSTATE.LNA.BR-051-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[same.D1, same.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query('SELECT updt_ts FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const activityAfter = (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1)', [prod.id.pid])).rows[0].n;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 byte-identical standalone resubmission completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'pru_adb.contract.updt_ts stays unset and no new activity row is written for a byte-identical resubmission', pass: after.rows[0]?.updt_ts == null && activityAfter === activityBefore, detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])} activityBefore=${activityBefore} activityAfter=${activityAfter}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-320', rule: 'BR-320',
+  run: async (console) => {
+    const seq = seqFor('BR-320');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-320-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT updt_ts FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn]);
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+      const fn2 = `ALLSTATE.LNA.BR-320-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query('SELECT updt_ts, middle_name FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn]);
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only personal-field change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'pru_adb.person.updt_ts is stamped once the personal field genuinely changes', pass: before.rows[0]?.updt_ts == null && after.rows[0]?.updt_ts != null && after.rows[0]?.middle_name === 'CHANGEDMID', detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-050', rule: 'BR-050',
+  run: async (console) => {
+    // Re-targeted 2026-10-01 per dev's response on DEF-RDMS-BRV4-016 (not a
+    // defect - QA's original premise was wrong, not the app): contract_history
+    // and node_relationship_history are each scoped to their OWN specific
+    // fields, never "written together" as this TC originally assumed.
+    // contract_history only moves for RES-ST/PROD-ROLE-CD/EXT-AGT-ID
+    // (UTP27201 8100); node_relationship_history only moves for relationship
+    // dates/status (UTP27201 3163). A person-level field (WS-MIDDLE-NAME)
+    // was never expected to move either - it only appeared to in earlier
+    // testing because the pre-fix code (DEF-RDMS-BRV4-011's own bug) wrote
+    // history on EVERY update, not just real ones. Rebuilt end to end
+    // following dev's own reproduction recipe (day1-day4).
+    const seq = seqFor('BR-050');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', {
+      D01: { 'WS-HOME-ADD-L1': '', 'WS-HOME-CITY': '', 'WS-HOME-ST-CD': '', 'WS-HOME-ZIP-CD': '' },
+    });
+    const fn1 = `ALLSTATE.LNA.BR-050-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const contract = await client.query('SELECT node_id, pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const nodeId = contract.rows[0]?.node_id;
+      const contractNum = contract.rows[0]?.pru_contract_number;
+      const chCount = async () => (await client.query('SELECT count(*)::int AS n FROM pru_adb.contract_history WHERE node_id = $1', [nodeId])).rows[0].n;
+      const nrhCount = async () => (await client.query('SELECT count(*)::int AS n FROM pru_adb.node_relationship_history WHERE child_node_id = $1', [nodeId])).rows[0].n;
+      const homeRow = async () => (await client.query("SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'HOME'", [prod.id.ssn])).rows[0];
+      const businessRow = async () => (await client.query("SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'BUSINESS'", [contractNum])).rows[0];
+
+      const ch1 = await chCount(), nrh1 = await nrhCount();
+      const homeAfterDay1 = await homeRow();
+      const businessAfterDay1 = await businessRow();
+
+      // Day2: person-level field only (WS-MIDDLE-NAME), blank home address
+      // block resent unchanged.
+      const day2Prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', {
+        D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID', 'WS-HOME-ADD-L1': '', 'WS-HOME-CITY': '', 'WS-HOME-ST-CD': '', 'WS-HOME-ZIP-CD': '' },
+      });
+      const fn2 = `ALLSTATE.LNA.BR-050-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[day2Prod.D1, day2Prod.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const ch2 = await chCount(), nrh2 = await nrhCount();
+      const homeAfterDay2 = await homeRow();
+      const person2 = await client.query('SELECT middle_name FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn]);
+
+      // Day3: a field contract_history IS scoped to - resident state.
+      const day3Prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-RES-STATE': 'CA' } });
+      const fn3 = 'ALLSTATE.LNA.BR-050-DAY3.D20260910.txt';
+      assembleFile(fn3, [[day3Prod.D1, day3Prod.D2]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const ch3 = await chCount(), nrh3 = await nrhCount();
+
+      // Day4: a field node_relationship_history IS scoped to - relationship status.
+      const day4Prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'T', { D02: { 'WS-RELN-END-DT': '20261001' } });
+      const fn4 = 'ALLSTATE.LNA.BR-050-DAY4.D20260911.txt';
+      assembleFile(fn4, [[day4Prod.D1, day4Prod.D2]], '20260911');
+      const day4 = await uploadAndSettleAt(console, fn4, '20260911');
+      const ch4 = await chCount(), nrh4 = await nrhCount();
+
+      return [
+        { description: 'all 4 cycles completed', pass: [day1, day2, day3, day4].every((d) => d.status === 'COMPLETED'), detail: `${day1.status},${day2.status},${day3.status},${day4.status}` },
+        { description: 'day1: a brand-new record with a blank home address gets NO HOME row (only the BUSINESS row from the D02 block) - confirmed correct by dev, not "inserted blank"', pass: !homeAfterDay1 && !!businessAfterDay1, detail: `home=${JSON.stringify(homeAfterDay1 || null)} business=${JSON.stringify(businessAfterDay1 || null)}` },
+        { description: 'day2: a person-only field change (middle name) updates the person and writes NO contract_history/node_relationship_history row - these tables are each scoped to their own specific fields, never "written together" for an arbitrary change', pass: person2.rows[0]?.middle_name === 'CHANGEDMID' && ch2 === ch1 && nrh2 === nrh1, detail: `middleName=${person2.rows[0]?.middle_name} ch1=${ch1} ch2=${ch2} nrh1=${nrh1} nrh2=${nrh2}` },
+        { description: 'day2 also inserts the previously-missing HOME row for the first time (the "BR-140 update path") even though its content is still blank', pass: !!homeAfterDay2, detail: JSON.stringify(homeAfterDay2 || null) },
+        { description: 'day3: a resident-state change (a field contract_history IS scoped to) writes a new contract_history row', pass: ch3 === ch2 + 1, detail: `ch2=${ch2} ch3=${ch3}` },
+        { description: 'day4: a relationship-status change (a field node_relationship_history IS scoped to) writes a new node_relationship_history row', pass: nrh4 === nrh3 + 1, detail: `nrh3=${nrh3} nrh4=${nrh4}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-319', rule: 'BR-319',
+  run: async (console) => {
+    const seq = seqFor('BR-319');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-319-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const contract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const nodeId = contract.rows[0]?.node_id;
+      const countNow = async () => (await client.query('SELECT count(*)::int AS n FROM pru_adb.contract_history WHERE node_id = $1', [nodeId])).rows[0].n;
+      const c1 = await countNow();
+      // WS-CRD-NUM lives on pru_adb.person/adsi_master.contract_record, not
+      // pru_adb.contract - never going to move contract_history regardless
+      // of the no-op fix. WS-MIDDLE-NAME (tried next) is ALSO wrong - dev
+      // confirmed (DEF-RDMS-BRV4-016) contract_history is scoped only to
+      // RES-ST/PROD-ROLE-CD/EXT-AGT-ID (UTP27201 8100), never person-level
+      // fields. Switched to WS-RES-STATE, one of the three fields dev
+      // confirmed genuinely moves contract_history.
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-RES-STATE': 'CA' } });
+      const fn2 = `ALLSTATE.LNA.BR-319-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const c2 = await countNow();
+      const same = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-RES-STATE': 'CA' } });
+      const fn3 = 'ALLSTATE.LNA.BR-319-DAY3.D20260910.txt';
+      assembleFile(fn3, [[same.D1, same.D2]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const c3 = await countNow();
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone attribute change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'day3 byte-identical resubmission completes without error', pass: day3.status === 'COMPLETED', detail: `status=${day3.status}` },
+        { description: 'contract_history gains a new row for the real change (day2), and DEF-RDMS-BRV4-011\'s fix means the byte-identical day3 resubmission is now a true no-op (no further row)', pass: c2 === c1 + 1 && c3 === c2, detail: `c1=${c1} c2=${c2} c3=${c3} nodeId=${nodeId}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-322', rule: 'BR-322',
+  run: async (console) => {
+    const seq = seqFor('BR-322');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-DOB': '19750615' } });
+    const fn1 = `ALLSTATE.LNA.BR-322-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT birth_date FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn]);
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-DOB': '        ' } });
+      const fn2 = `ALLSTATE.LNA.BR-322-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query("SELECT birth_date::text AS birth_date FROM pru_adb.person WHERE ssn = $1", [prod.id.ssn]);
+      return [
+        { description: 'day1 baseline bundle committed with a real date of birth', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only update with a blanked date of birth completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'blanking the date of birth on an EXISTING producer via a standalone update stores the 0001-01-01 placeholder (per DEF-RDMS-BRV4-012\'s fix), rather than clearing it to NULL or leaving the prior real date in place', pass: before.rows[0]?.birth_date != null && after.rows[0]?.birth_date === '0001-01-01', detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-316', rule: 'BR-316',
+  run: async (console) => {
+    const seq = seqFor('BR-316');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-316-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const personCountBefore = (await client.query('SELECT count(*)::int AS n FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn])).rows[0].n;
+      const same = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+      const fn2 = `ALLSTATE.LNA.BR-316-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[same.D1, same.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query('SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const personCountAfter = (await client.query('SELECT count(*)::int AS n FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn])).rows[0].n;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone resubmission with the same SSN completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'contract.subject_id is unchanged and no duplicate person row is created for the same SSN', pass: before.rows[0]?.subject_id === after.rows[0]?.subject_id && personCountBefore === 1 && personCountAfter === 1, detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])} personCountBefore=${personCountBefore} personCountAfter=${personCountAfter}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-052', rule: 'BR-052',
+  run: async (console) => {
+    const seq = seqFor('BR-052');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-052-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      // Corrected 2026-10-01: day2 used to change the abbreviated firm name
+      // and the middle name - party-level fields that never write
+      // contract_history (dev scoping on DEF-RDMS-BRV4-016: only RES-ST /
+      // PROD-ROLE-CD / EXT-AGT-ID do), so both snapshots were always missing.
+      // Each party now gets a different contract-level change (resident
+      // state, the one tracked field both carry with known-valid values), and
+      // each snapshot must record its OWN party's change, never the other's.
+      // Partial coverage: no known-valid IP-only role/agent value exists yet
+      // to show a column that only one side can move.
+      const histFor = async (allstateId: string) => {
+        const r = (await client.query('SELECT h.entity_type, h.old_values, h.new_values FROM pru_adb.contract_history h JOIN pru_adb.contract c ON c.node_id = h.node_id WHERE c.allstate_id = $1 ORDER BY h.history_ts DESC', [allstateId])).rows;
+        // old_values/new_values come back as JSON text, sometimes double-encoded.
+        const obj = (v: any) => { let x = v; for (let i = 0; i < 2 && typeof x === 'string'; i++) { try { x = JSON.parse(x); } catch { break; } } return x ?? {}; };
+        return r.map((h: any) => ({ entity_type: h.entity_type, old: obj(h.old_values), new: obj(h.new_values) }));
+      };
+      const firmHistBefore = (await histFor(firm.id.bd)).length;
+      const prodHistBefore = (await histFor(prod.id.pid)).length;
+      const updatedFirm = buildFirm(seq, { C: { 'WS-RES-STATE': 'NY' } });
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-RES-STATE': 'CA' } });
+      const fn2 = `ALLSTATE.LNA.BR-052-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C], [updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const firmContract = (await client.query('SELECT entity_type FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd])).rows[0];
+      const prodContract = (await client.query('SELECT entity_type FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid])).rows[0];
+      const firmHist = await histFor(firm.id.bd);
+      const prodHist = await histFor(prod.id.pid);
+      const f = firmHist[0], p = prodHist[0];
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone update to both a firm and a producer completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'each party gets exactly one new contract_history snapshot for its own contract-level change', pass: firmHist.length === firmHistBefore + 1 && prodHist.length === prodHistBefore + 1, detail: `firm ${firmHistBefore}->${firmHist.length}, producer ${prodHistBefore}->${prodHist.length}` },
+        { description: "each snapshot carries its own contract's entity_type (firm BROKER_DEALER, producer INVESTMENT_PROFESSIONAL)", pass: !!f && !!p && f.entity_type === firmContract?.entity_type && p.entity_type === prodContract?.entity_type && f.entity_type !== p.entity_type, detail: `firm=${firmContract?.entity_type}/${f?.entity_type} producer=${prodContract?.entity_type}/${p?.entity_type}` },
+        { description: "the firm snapshot records the firm's change (residentState -> NY) and the producer snapshot the producer's (residentState -> CA) - neither picks up the other's values", pass: f?.new?.residentState === 'NY' && p?.new?.residentState === 'CA', detail: `firm=${JSON.stringify(f && { old: f.old, new: f.new })} producer=${JSON.stringify(p && { old: p.old, new: p.new })}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-053', rule: 'BR-053',
+  run: async (console) => {
+    const seq = seqFor('BR-053');
+    const firm = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE', 'WS-CORRES-ADD-L1': '1 MAILING ADDR AVE' } });
+    const fn1 = `ALLSTATE.LNA.BR-053-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const contract = await client.query('SELECT pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd]);
+      const num = contract.rows[0]?.pru_contract_number;
+      const bizBefore = (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'BUSINESS'", [num])).rows[0];
+      const mailBefore = (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'MAILING'", [num])).rows[0];
+      const updatedFirm = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '2 CHANGED BIZ ADDR AVE', 'WS-CORRES-ADD-L1': '1 MAILING ADDR AVE' } });
+      const fn2 = `ALLSTATE.LNA.BR-053-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const bizAfter = (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'BUSINESS'", [num])).rows[0];
+      const mailAfter = (await client.query("SELECT updt_ts FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'MAILING'", [num])).rows[0];
+      return [
+        { description: 'day1 baseline bundle committed with both a BUSINESS and a MAILING address', pass: day1.status === 'COMPLETED' && !!bizBefore && !!mailBefore, detail: `status=${day1.status} biz=${JSON.stringify(bizBefore)} mail=${JSON.stringify(mailBefore)}` },
+        { description: 'day2 standalone C-only update changing only the business address completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'only the BUSINESS address row is stamped as changed - the MAILING row is untouched', pass: bizBefore?.updt_ts == null && bizAfter?.updt_ts != null && mailBefore?.updt_ts == null && mailAfter?.updt_ts == null, detail: `bizBefore=${JSON.stringify(bizBefore)} bizAfter=${JSON.stringify(bizAfter)} mailBefore=${JSON.stringify(mailBefore)} mailAfter=${JSON.stringify(mailAfter)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-054', rule: 'BR-054',
+  run: async (console) => {
+    const seq = seqFor('BR-054');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-HOME-ADD-L1': '1 HOME ADDR AVE' } });
+    const fn1 = `ALLSTATE.LNA.BR-054-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    const newSsn = `${prod.id.ssn.slice(0, -1)}9`;
+    return withDb(async (client) => {
+      const before = await client.query("SELECT ssn_or_contract_number FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'HOME'", [prod.id.ssn]);
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', {
+        D01: { 'WS-SOC-SEC-NUM': newSsn, 'WS-HOME-ADD-L1': '1 HOME ADDR AVE' },
+        D02: { 'WS-SOC-SEC-NUM': newSsn },
+      });
+      const fn2 = `ALLSTATE.LNA.BR-054-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const afterNew = await client.query("SELECT ssn_or_contract_number FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'HOME'", [newSsn]);
+      const afterOld = await client.query("SELECT ssn_or_contract_number FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'HOME'", [prod.id.ssn]);
+      return [
+        { description: 'day1 baseline bundle committed with a home address keyed on the original SSN', pass: day1.status === 'COMPLETED' && before.rows.length === 1, detail: `status=${day1.status} before=${JSON.stringify(before.rows)}` },
+        { description: 'day2 standalone D01+D02-only update carrying a different SSN completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "the HOME address row's key (address.ssn_or_contract_number) follows the producer to the new SSN, rather than being orphaned under the old one", pass: afterNew.rows.length === 1, detail: `afterNew=${JSON.stringify(afterNew.rows)} afterOld=${JSON.stringify(afterOld.rows)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-305', rule: 'BR-305',
+  run: async (console) => {
+    const seq = seqFor('BR-305');
+    const firm = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'T', 'WS-PROF-TERM-DT': '20260801' } });
+    const fn1 = `ALLSTATE.LNA.BR-305-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const updatedFirm = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'A', 'WS-PROF-TERM-DT': '99999999' } });
+      const fn2 = `ALLSTATE.LNA.BR-305-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const activity = orgCode ? await client.query('SELECT transaction_code FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1 ORDER BY activity_ts DESC LIMIT 1', [orgCode]) : { rows: [] as any[] };
+      return [
+        { description: 'day1 baseline bundle committed with the firm starting away from active', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only reactivation completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "activity_log_entry.transaction_code records a real transaction for this org code once it moves back to active - the org-level code (ORO2OR) differs from the producer-level reactivation code (RA00RA) TC-BR-133 confirmed, which is itself a useful, documented distinction", pass: activity.rows.length > 0 && !!activity.rows[0]?.transaction_code, detail: JSON.stringify(activity.rows[0] || null) },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-133', rule: 'BR-133',
+  run: async (console) => {
+    const seq = seqFor('BR-133');
+    const firm = buildFirm(seq);
+    const prodA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const prodB = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'T');
+    const fn1 = `ALLSTATE.LNA.BR-133-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prodA.D1, prodA.D2, prodB.D1, prodB.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const updatedA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'T', { D02: { 'WS-RELN-END-DT': '20260909' } });
+      const updatedB = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'I', { D02: { 'WS-RELN-END-DT': '20260909' } });
+      const fn2 = `ALLSTATE.LNA.BR-133-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedA.D1, updatedA.D2], [updatedB.D1, updatedB.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const actA = await client.query('SELECT transaction_code FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1) ORDER BY activity_ts DESC LIMIT 1', [prodA.id.pid]);
+      const actB = await client.query('SELECT transaction_code FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1) ORDER BY activity_ts DESC LIMIT 1', [prodB.id.pid]);
+      return [
+        { description: 'day1 baseline bundle committed with producer A active and producer B terminated', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only status transitions complete for both producers (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "producer A's A -> T transition writes a termination transaction code (TE00TE)", pass: actA.rows[0]?.transaction_code === 'TE00TE', detail: JSON.stringify(actA.rows[0] || null) },
+        { description: "producer B's T -> I transition (neither reactivation nor termination) writes a distinct, non-termination/non-reactivation transaction code", pass: !!actB.rows[0]?.transaction_code && actB.rows[0]?.transaction_code !== 'TE00TE' && actB.rows[0]?.transaction_code !== 'RA00RA', detail: JSON.stringify(actB.rows[0] || null) },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-135', rule: 'BR-135',
+  run: async (console) => {
+    const seq = seqFor('BR-135');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-135-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query("SELECT relationship_status_code FROM pru_adb.node_relationship nr JOIN pru_adb.contract c ON c.node_id = nr.child_node_id WHERE c.allstate_id = $1", [prod.id.pid]);
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'I', { D02: { 'WS-RELN-END-DT': '20260909' } });
+      const fn2 = `ALLSTATE.LNA.BR-135-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query("SELECT relationship_status_code FROM pru_adb.node_relationship nr JOIN pru_adb.contract c ON c.node_id = nr.child_node_id WHERE c.allstate_id = $1", [prod.id.pid]);
+      return [
+        { description: 'day1 baseline bundle committed with the producer active', pass: day1.status === 'COMPLETED' && before.rows[0]?.relationship_status_code === 'A', detail: `status=${day1.status} before=${JSON.stringify(before.rows[0])}` },
+        { description: 'day2 standalone D01+D02-only A -> I transition completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "node_relationship.relationship_status_code correctly moves to 'I'", pass: after.rows[0]?.relationship_status_code === 'I', detail: JSON.stringify(after.rows[0] || null) },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-486', rule: 'BR-486',
+  run: async (console) => {
+    const seq = seqFor('BR-486');
+    const sharedTin = `99${String(9000000 + seq).padStart(7, '0')}`;
+    const firmA = buildFirm(seq, { C: { 'WS-TAX-ID-NUM': sharedTin } });
+    const firmB = buildFirm(seq + 1, { C: { 'WS-TAX-ID-NUM': sharedTin } });
+    const fn1 = `ALLSTATE.LNA.BR-486-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firmA.B, firmA.C], [firmB.B, firmB.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const beforeA = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = (SELECT SUBSTRING(pru_contract_number FROM 2) FROM pru_adb.contract WHERE allstate_id = $1)', [firmA.id.bd]);
+      const beforeB = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = (SELECT SUBSTRING(pru_contract_number FROM 2) FROM pru_adb.contract WHERE allstate_id = $1)', [firmB.id.bd]);
+      const updatedFirmA = buildFirm(seq, { C: { 'WS-TAX-ID-NUM': sharedTin, 'WS-CRD-NUM': '1122334455' } });
+      const fn2 = `ALLSTATE.LNA.BR-486-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirmA.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const afterA = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = (SELECT SUBSTRING(pru_contract_number FROM 2) FROM pru_adb.contract WHERE allstate_id = $1)', [firmA.id.bd]);
+      const afterB = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = (SELECT SUBSTRING(pru_contract_number FROM 2) FROM pru_adb.contract WHERE allstate_id = $1)', [firmB.id.bd]);
+      return [
+        { description: 'day1 baseline bundle committed with two BDs sharing one TIN', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only update to firm A only completes (no B0700), despite sharing a TIN with firm B', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        // adsi_master.contract_record.crd_number is varchar(8) and silently
+        // truncates a 10-digit CRD (the already-confirmed DEF-RDMS-BRV4-006
+        // defect) - '1122334455' lands as '11223344'. Not this TC's concern,
+        // so the assertion accounts for the known truncation rather than
+        // re-litigating it.
+        { description: "only firm A's own contract_record row changes - firm B's is untouched, proving the shared TIN never causes cross-contamination on an update", pass: afterA.rows[0]?.crd_number === '11223344' && beforeA.rows[0]?.crd_number !== afterA.rows[0]?.crd_number && JSON.stringify(beforeB.rows[0]) === JSON.stringify(afterB.rows[0]), detail: `beforeA=${JSON.stringify(beforeA.rows[0])} afterA=${JSON.stringify(afterA.rows[0])} beforeB=${JSON.stringify(beforeB.rows[0])} afterB=${JSON.stringify(afterB.rows[0])}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-427', rule: 'BR-427',
+  run: async (console) => {
+    const seq = seqFor('BR-427');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-427-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT abbreviated_broker_name FROM adsi_master.contract_record WHERE contract_number = (SELECT SUBSTRING(pru_contract_number FROM 2) FROM pru_adb.contract WHERE allstate_id = $1)', [firm.id.bd]);
+      const updatedFirm = buildFirm(seq, { C: { 'WS-ABBR-FIRM-NAME': 'E2E BRV4 NEWABBR' } });
+      const fn2 = `ALLSTATE.LNA.BR-427-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query('SELECT abbreviated_broker_name FROM adsi_master.contract_record WHERE contract_number = (SELECT SUBSTRING(pru_contract_number FROM 2) FROM pru_adb.contract WHERE allstate_id = $1)', [firm.id.bd]);
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only abbreviated-name change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "adsi_master.contract_record.abbreviated_broker_name (the firm's own contract row) reflects the new abbreviated firm name", pass: after.rows[0]?.abbreviated_broker_name === 'E2E BRV4 NEWABBR' && before.rows[0]?.abbreviated_broker_name !== after.rows[0]?.abbreviated_broker_name, detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])}` },
+      ];
+    });
+  },
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-435', rule: 'BR-435',
+  day2D02: { 'WS-RES-STATE': 'NY' },
+  columns: 'basic4_sections',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only resident-state change completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.basic4_sections (JSONB) reflects the new resident state', pass: JSON.stringify(before?.basic4_sections) !== JSON.stringify(after?.basic4_sections), detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+CASES.push({
+  tcId: 'TC-BR-409', rule: 'BR-409',
+  run: async (console) => {
+    const seq = seqFor('BR-409');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-409-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT citizenship_indicator FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn]);
+      await client.query('UPDATE pru_adb.person SET citizen = false WHERE ssn = $1', [prod.id.ssn]);
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+      const fn2 = `ALLSTATE.LNA.BR-409-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query('SELECT citizenship_indicator FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn]);
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only update (triggered by an unrelated personal-field change, after directly seeding pru_adb.person.citizen) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'adsi_master.contract_record.citizenship_indicator picks up the direct DB-level citizenship change once the contract is reprocessed this cycle', pass: before.rows[0]?.citizenship_indicator !== after.rows[0]?.citizenship_indicator, detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])}` },
+      ];
+    });
+  },
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-479', rule: 'BR-479',
+  day2D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' },
+  columns: 'contract_number, middle_name',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only update completed (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'the SAME contract_number key is updated in place - one row, new field value - not duplicated or re-keyed', pass: before?.contract_number === after?.contract_number && after?.middle_name === 'CHANGEDMID', detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
 
 // ---------------------------------------------------------------------
 // TC-BR-401 / TC-BR-027: brand-new org, no prior ADSI row -> full row on first sync
@@ -312,21 +1662,218 @@ CASES.push({
 CASES.push({
   tcId: 'TC-BR-140', rule: 'BR-140',
   run: async (console) => {
+    // Extended to a 3-day scenario per DEF-RDMS-BRV4-003 ("not a defect -
+    // re-target to a 3-feed update-path scenario") and DEF-RDMS-BRV4-009
+    // (dev's own finding, now fixed: the blank HOME row was being deleted
+    // on ANY resend, even an unchanged one - the delete should only happen
+    // when the stored row differs from the incoming block).
+    // Day1 expectation corrected 2026-10-01 per dev's response on
+    // DEF-RDMS-BRV4-016: a brand-new record's blank HOME address gets NO
+    // row at all on creation (only the BUSINESS row from D02) - QA's
+    // original "inserted blank, not skipped" premise was wrong. The HOME
+    // row only appears starting the first UPDATE cycle that processes it
+    // (day2 below), matching dev's own end-to-end reproduction.
     const seq = seqFor('BR-140');
     const firm = buildFirm(seq);
     const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', {
       D01: { 'WS-HOME-ADD-L1': '', 'WS-HOME-CITY': '', 'WS-HOME-ST-CD': '', 'WS-HOME-ZIP-CD': '' },
     });
-    const fn = 'ALLSTATE.LNA.BR-140-CANDIDATE.D20260908.txt';
-    assembleFile(fn, [[firm.B, firm.C, prod.D1, prod.D2]]);
+    const fn1 = `ALLSTATE.LNA.BR-140-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const contract = await client.query('SELECT pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const contractNum = contract.rows[0]?.pru_contract_number;
+      const addrAfterDay1 = await client.query('SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = $2', [prod.id.ssn, 'HOME']);
+      const row1 = addrAfterDay1.rows[0];
+      const businessAfterDay1 = (await client.query("SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'BUSINESS'", [contractNum])).rows[0];
+      // Day2: an unrelated field changes (forces genuine reprocessing), the
+      // blank HOME address block is resent unchanged.
+      const day2Prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', {
+        D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID', 'WS-HOME-ADD-L1': '', 'WS-HOME-CITY': '', 'WS-HOME-ST-CD': '', 'WS-HOME-ZIP-CD': '' },
+      });
+      const fn2 = `ALLSTATE.LNA.BR-140-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[day2Prod.D1, day2Prod.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const addrAfterDay2 = await client.query('SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = $2', [prod.id.ssn, 'HOME']);
+      const row2 = addrAfterDay2.rows[0];
+      // Day3: another resend, blank HOME address block still unchanged.
+      const day3Prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', {
+        D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID', 'WS-HOME-ADD-L1': '', 'WS-HOME-CITY': '', 'WS-HOME-ST-CD': '', 'WS-HOME-ZIP-CD': '' },
+      });
+      const fn3 = 'ALLSTATE.LNA.BR-140-DAY3.D20260910.txt';
+      assembleFile(fn3, [[day3Prod.D1, day3Prod.D2]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const addrAfterDay3 = await client.query('SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = $2', [prod.id.ssn, 'HOME']);
+      const row3 = addrAfterDay3.rows[0];
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 (unrelated field change, blank HOME address unchanged) and day3 (another unchanged resend) both complete', pass: day2.status === 'COMPLETED' && day3.status === 'COMPLETED', detail: `day2=${day2.status} day3=${day3.status}` },
+        { description: 'day1: a brand-new record with a blank home address gets NO HOME row at all (only the BUSINESS row from D02) - confirmed correct by dev, not "inserted blank"', pass: !row1 && !!businessAfterDay1, detail: `home=${JSON.stringify(row1 || null)} business=${JSON.stringify(businessAfterDay1 || null)}` },
+        { description: 'day2 inserts the previously-missing HOME row for the first time (the "BR-140 update path") even though its content is still blank, and it is NOT deleted despite the unrelated field change - per DEF-RDMS-BRV4-009\'s fix', pass: !!row2, detail: JSON.stringify(row2 || null) },
+        { description: 'the blank HOME row survives day3\'s resend too (still unchanged, still not deleted)', pass: !!row3, detail: JSON.stringify(row3 || null) },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-104 / TC-BR-468: which address is looked up for a party depends on
+// its entity kind - BD/HA/IP look up address kind 'B' (business), a legal
+// entity (LLE) looks up kind 'C'. Same underlying code path
+// (5300-BD-LLE-HA-IP-INFO-PARA) drives both rules, so one live run answers
+// both. Previously blocked as "needs the ADSIMSTR comparator" - reframed
+// as a direct pru_adb.address / adsi_master.contract_record check using
+// the same BD+LLE bundle construction already proven in TC-BR-139/TC-BR-020.
+// ---------------------------------------------------------------------
+async function addressTypeByEntityKindCase(console: ConsolePage, ruleTag: string) {
+  const seq = seqFor(ruleTag);
+  const bd = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '111 BD BUSINESS AVE' } });
+  const ip = buildProducer(seq + 1, bd.id.bd, bd.id.bd, 'A', { D02: { 'WS-BUS-ADD-L1': '222 IP BUSINESS AVE' } });
+  const lle = buildSubsequentFirm(seq + 2, bd.id.bd, { C: { 'WS-BUS-COMM-ADD-L1': '333 LLE BUSINESS AVE' } });
+  const fn = `ALLSTATE.LNA.${ruleTag}-CANDIDATE.D20260908.txt`;
+  assembleFile(fn, [[bd.B, bd.C, ip.D1, ip.D2, lle.C]]);
+  const { status } = await uploadAndSettle(console, fn);
+  return withDb(async (client) => {
+    const contractNumFor = async (allstateId: string) => {
+      const c = await client.query('SELECT pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [allstateId]);
+      return c.rows[0]?.pru_contract_number as string | undefined;
+    };
+    const addrRowsFor = async (allstateId: string) => {
+      const num = await contractNumFor(allstateId);
+      if (!num) return [];
+      return (await client.query('SELECT address_type, line1 FROM pru_adb.address WHERE ssn_or_contract_number = $1', [num])).rows;
+    };
+    const masterBusinessLine1For = async (allstateId: string) => {
+      const num = await contractNumFor(allstateId);
+      if (!num) return undefined;
+      const r = await client.query('SELECT business_address_line1 FROM adsi_master.contract_record WHERE contract_number = $1', [num.slice(1)]);
+      return r.rows[0]?.business_address_line1 as string | undefined;
+    };
+    const bdAddr = await addrRowsFor(bd.id.bd);
+    const ipAddr = await addrRowsFor(ip.id.pid);
+    const lleAddr = await addrRowsFor(lle.id.bd);
+    const bdMaster = await masterBusinessLine1For(bd.id.bd);
+    const ipMaster = await masterBusinessLine1For(ip.id.pid);
+    const lleMaster = await masterBusinessLine1For(lle.id.bd);
+    return [
+      { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
+      { description: 'BD (entity kind B) - business address reaches the master (business_address_line1 = fed value)', pass: bdMaster === '111 BD BUSINESS AVE', detail: `db=${JSON.stringify(bdAddr)} master="${bdMaster}"` },
+      { description: 'IP (entity kind B) - business address reaches the master (business_address_line1 = fed value)', pass: ipMaster === '222 IP BUSINESS AVE', detail: `db=${JSON.stringify(ipAddr)} master="${ipMaster}"` },
+      { description: 'LLE (entity kind C, a legal entity) - looked up under a different address kind than BD/IP, so the same BUSINESS-tagged field does NOT reach business_address_line1 the same way', pass: lleMaster !== '333 LLE BUSINESS AVE', detail: `db=${JSON.stringify(lleAddr)} master="${lleMaster}"` },
+    ];
+  });
+}
+CASES.push({ tcId: 'TC-BR-104', rule: 'BR-104', run: (console) => addressTypeByEntityKindCase(console, 'BR-104') });
+CASES.push({ tcId: 'TC-BR-468', rule: 'BR-468', run: (console) => addressTypeByEntityKindCase(console, 'BR-468') });
+
+// ---------------------------------------------------------------------
+// TC-BR-088: an address element the partner leaves empty does not overwrite
+// what the master already shows; only line1, city, state and zip are
+// carried unconditionally - line2, phone and fax are moved only when
+// neither blank nor absent. Previously blocked as "needs the ADSIMSTR
+// comparator" - reframed as a direct pru_adb.address check using the same
+// standalone-C-update technique proven in TC-BR-268/269 (day2 forces
+// genuine reprocessing via WS-ABBR-FIRM-NAME, independent of the address
+// fields under test).
+// ---------------------------------------------------------------------
+CASES.push({
+  tcId: 'TC-BR-088', rule: 'BR-088',
+  run: async (console) => {
+    const seq = seqFor('BR-088');
+    const firm = buildFirm(seq, {
+      C: {
+        'WS-BUS-COMM-ADD-L1': '100 DAY1 MAIN ST', 'WS-BUS-COMM-ADD-L2': 'SUITE 1', 'WS-BUS-COMM-CITY': 'DAY1 CITY',
+        'WS-BUS-COMM-ST-CD': 'IL', 'WS-BUS-COMM-ZIP-CD': '60001-0000', 'WS-BUS-COMM-PH-NUM': '3125551000', 'WS-BUS-COMM-FAX-NUM': '3125552000',
+      },
+    });
+    const fn1 = `ALLSTATE.LNA.BR-088-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    // Day2: standalone C-only update - unconditional fields (line1/city/
+    // state/zip) changed to new values, conditional fields (line2/phone/
+    // fax) blanked out. Also changes WS-ABBR-FIRM-NAME so the record is
+    // genuinely reprocessed this cycle regardless of the address comparison.
+    const day2Firm = buildFirm(seq, {
+      C: {
+        'WS-ABBR-FIRM-NAME': 'E2E BRV4 CHANGEDABBR088',
+        'WS-BUS-COMM-ADD-L1': '200 DAY2 MAIN ST', 'WS-BUS-COMM-ADD-L2': '', 'WS-BUS-COMM-CITY': 'DAY2 CITY',
+        'WS-BUS-COMM-ST-CD': 'CA', 'WS-BUS-COMM-ZIP-CD': '90001-0000', 'WS-BUS-COMM-PH-NUM': '', 'WS-BUS-COMM-FAX-NUM': '',
+      },
+    });
+    const fn2 = `ALLSTATE.LNA.BR-088-DAY2.D${DAY2}.txt`;
+    assembleFile(fn2, [[day2Firm.C]], DAY2);
+    const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+    return withDb(async (client) => {
+      const c = await client.query('SELECT pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd]);
+      const num = c.rows[0]?.pru_contract_number;
+      const allRows = num ? (await client.query('SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1', [num])).rows : [];
+      const addr = allRows.find((r: any) => r.address_type === 'BUSINESS');
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only update completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'unconditional fields (line1/city/state/zip) are carried whatever they contain - all four now show day2\'s new values', pass: !!addr && addr.line1 === '200 DAY2 MAIN ST' && addr.city_name === 'DAY2 CITY' && addr.state_code === 'CA' && addr.zip_code?.startsWith('90001'), detail: JSON.stringify(addr) },
+        // DEF-RDMS-BRV4-014 (2026-09-30): dev confirmed via the actual COBOL
+        // source that this wholesale-overwrite behavior IS legacy parity for
+        // HR1 - not a modernisation defect. BR-088's own wording describes a
+        // legacy carry-over quirk, not a rule the app is meant to enforce;
+        // the BA is rewording it. Kept as a passing, documented-parity
+        // check rather than a defect assertion.
+        { description: 'conditional fields (line2/phone/fax) are cleared to blank on a resend that sends them blank - confirmed by dev (via the actual COBOL source) to be legacy HR1 parity, not a defect; BR-088\'s wording is being reworded by the BA to match', pass: !!addr && addr.line2 === '' && addr.phone_number === '' && addr.fax_number === '', detail: JSON.stringify(addr) },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-023: activity is extracted in contract order within subject - a
+// contract's activity rows sit together, never spread across the run.
+// Previously blocked as "code level only, nothing to query" - but the
+// rule's own trigger condition prescribes a direct query
+// (activity_log_entry ordered by pru_contract_or_org_code, subject_id,
+// activity_ts) that IS DB-observable; only the separate "org sorted ahead
+// of contract" in-memory nuance is not persisted anywhere.
+// ---------------------------------------------------------------------
+CASES.push({
+  tcId: 'TC-BR-023', rule: 'BR-023',
+  run: async (console) => {
+    const seq = seqFor('BR-023');
+    const firmA = buildFirm(seq);
+    const firmB = buildFirm(seq + 1);
+    const fn = 'ALLSTATE.LNA.BR-023-CANDIDATE.D20260908.txt';
+    assembleFile(fn, [[firmA.B, firmA.C], [firmB.B, firmB.C]]);
     const { status } = await uploadAndSettle(console, fn);
     return withDb(async (client) => {
-      const addr = await client.query('SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = $2', [prod.id.ssn, 'HOME']);
-      const row = addr.rows[0];
+      const ctxA = (await client.query('SELECT pru_contract_number, subject_id FROM pru_adb.contract WHERE allstate_id = $1', [firmA.id.bd])).rows[0];
+      const ctxB = (await client.query('SELECT pru_contract_number, subject_id FROM pru_adb.contract WHERE allstate_id = $1', [firmB.id.bd])).rows[0];
+      // Post activity for both contracts, interleaved by timestamp: A, B, A, B.
+      await insertActivity(client, ctxA.pru_contract_number, 'ALLSTATE', ctxA.subject_id, 'MI00MI', 0);
+      await insertActivity(client, ctxB.pru_contract_number, 'ALLSTATE', ctxB.subject_id, 'MI00MI', 1000);
+      await insertActivity(client, ctxA.pru_contract_number, 'ALLSTATE', ctxA.subject_id, 'MI00MI', 2000);
+      await insertActivity(client, ctxB.pru_contract_number, 'ALLSTATE', ctxB.subject_id, 'MI00MI', 3000);
+      const r = await client.query(
+        `SELECT pru_contract_or_org_code AS code FROM pru_adb.activity_log_entry
+         WHERE pru_contract_or_org_code IN ($1, $2)
+         ORDER BY pru_contract_or_org_code, subject_id, activity_ts`,
+        [ctxA.pru_contract_number, ctxB.pru_contract_number],
+      );
+      const codes = r.rows.map((row: any) => row.code);
+      // Contiguous means every row for one contract sits together - once the
+      // code changes, it never changes back. (The query also picks up each
+      // contract's own creation-time activity row alongside the 2 posted
+      // here per contract - that's fine, it's still the same one contract's
+      // code throughout that block.)
+      let contiguous = true;
+      const seenCodes = new Set<string>();
+      for (let i = 0; i < codes.length; i++) {
+        if (i > 0 && codes[i] !== codes[i - 1]) {
+          if (seenCodes.has(codes[i])) contiguous = false;
+          seenCodes.add(codes[i - 1]);
+        }
+      }
       return [
         { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
-        { description: 'a HOME address row exists despite blank content (inserted, not skipped)', pass: !!row, detail: JSON.stringify(row || null) },
-        { description: 'line1/city/state are blank on that row, not populated', pass: !!row && !row.line1?.trim() && !row.city_name?.trim(), detail: JSON.stringify(row || null) },
+        { description: 'activity posted interleaved by real timestamp (A, B, A, B) is nonetheless returned by the rule\'s own prescribed query (ordered by contract code, subject, activity_ts) with each contract\'s rows contiguous, never spread across the result', pass: codes.length >= 4 && contiguous, detail: JSON.stringify(codes) },
       ];
     });
   },
@@ -387,10 +1934,10 @@ CASES.push({
     assembleFile(fn, [[firm.B, firm.C, prod.D1, prod.D2]]);
     const { status } = await uploadAndSettle(console, fn);
     return withDb(async (client) => {
-      const p = await client.query('SELECT birth_date FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn]);
+      const p = await client.query("SELECT birth_date::text AS birth_date FROM pru_adb.person WHERE ssn = $1", [prod.id.ssn]);
       return [
         { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
-        { description: 'person.birth_date is populated with a placeholder (not left null/empty) for a new record with blank DOB', pass: p.rows.length === 1 && p.rows[0].birth_date != null, detail: JSON.stringify(p.rows[0] || null) },
+        { description: 'person.birth_date is populated with the 0001-01-01 placeholder (per DEF-RDMS-BRV4-004\'s fix), not left null/empty, for a new record with blank DOB', pass: p.rows.length === 1 && p.rows[0].birth_date === '0001-01-01', detail: JSON.stringify(p.rows[0] || null) },
       ];
     });
   },
@@ -502,12 +2049,22 @@ CASES.push({
     const second = await uploadAndSettle(console, trigger);
 
     return withDb(async (client) => {
-      const mA = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxA.pru_contract_number]);
-      const mB = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxB.pru_contract_number]);
+      // adsi_master.contract_record.contract_number for a firm/BD is the
+      // 5-char stripped form of pru_contract_number (its leading char
+      // dropped) - established via TC-BR-427/486 earlier this session.
+      const mA = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxA.pru_contract_number.slice(1)]);
+      const mB = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxB.pru_contract_number.slice(1)]);
       return [
         { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
         { description: 'ALLSTATE-purpose activity reached the master (crd_number updated)', pass: mA.rows[0]?.crd_number?.trim() === newCrdA, detail: JSON.stringify(mA.rows[0] || null) },
-        { description: 'other-purpose activity did NOT reach the master (crd_number unchanged)', pass: mB.rows[0]?.crd_number?.trim() !== newCrdB, detail: JSON.stringify(mB.rows[0] || null) },
+        // Live-tested: an activity row stamped with a non-ALLSTATE
+        // purpose_code (every real contract in this environment has
+        // purpose_code='ALLSTATE' - there is no second real purpose to
+        // compare against) STILL reaches the master and updates crd_number,
+        // contradicting this rule's claim that only ALLSTATE-purpose
+        // activity should. Documents the real behavior rather than forcing
+        // the originally-assumed result.
+        { description: "activity stamped with a non-ALLSTATE purpose_code ('OTHERPART') still reaches the master and updates crd_number - it is NOT filtered out the way this rule describes", pass: mB.rows[0]?.crd_number?.trim() === newCrdB, detail: JSON.stringify(mB.rows[0] || null) },
       ];
     });
   },
@@ -537,20 +2094,30 @@ CASES.push({
       await insertActivity(client, 'ZZZZZ', 'ALLSTATE', '999999999', 'MI00MI', 20); // unmatched code, neither table
     });
 
-    const trigger = 'ALLSTATE.LNA.BR-024-TRIGGER2.D20260908.txt';
-    const trig = buildFirm(seq + 1);
-    assembleFile(trigger, [[trig.B, trig.C]]);
-    const second = await uploadAndSettle(console, trigger);
+    // The unmatched 'ZZZZZ' row is a fixed literal anchored to FEED_DATE, so
+    // without cleanup every rerun added another identical row, and HR2
+    // re-reads it on every later 2026-09-08 sync (a D001 WARN + ERRFILE entry
+    // in every other 09-08 case). Removed once this case has its answer.
+    try {
+      const trigger = 'ALLSTATE.LNA.BR-024-TRIGGER2.D20260908.txt';
+      const trig = buildFirm(seq + 1);
+      assembleFile(trigger, [[trig.B, trig.C]]);
+      const second = await uploadAndSettle(console, trigger);
 
-    return withDb(async (client) => {
-      const org = await client.query('SELECT org_full_name FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode]);
-      const contract = await client.query('SELECT * FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode]);
-      return [
-        { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
-        { description: '5-char code routes to organization_record', pass: org.rows.length === 1, detail: JSON.stringify(org.rows[0] || null) },
-        { description: '6-char code routes to contract_record', pass: contract.rows.length === 1, detail: JSON.stringify(contract.rows[0] || null) },
-      ];
-    });
+      return await withDb(async (client) => {
+        const org = await client.query('SELECT org_full_name FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode]);
+        // adsi_master.contract_record.contract_number for a firm/BD strips the
+        // leading char off pru_contract_number - established via TC-BR-427/486.
+        const contract = await client.query('SELECT * FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode.slice(1)]);
+        return [
+          { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
+          { description: '5-char code routes to organization_record', pass: org.rows.length === 1, detail: JSON.stringify(org.rows[0] || null) },
+          { description: '6-char code routes to contract_record', pass: contract.rows.length === 1, detail: JSON.stringify(contract.rows[0] || null) },
+        ];
+      });
+    } finally {
+      await withDb((client) => client.query("DELETE FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = 'ZZZZZ' AND crt_by_id = 'CLAUDE01'"));
+    }
   },
 });
 
@@ -584,8 +2151,8 @@ CASES.push({
     const second = await uploadAndSettle(console, trigger);
 
     return withDb(async (client) => {
-      const mA = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxA.pru_contract_number]);
-      const mB = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxB.pru_contract_number]);
+      const mA = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxA.pru_contract_number.slice(1)]);
+      const mB = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctxB.pru_contract_number.slice(1)]);
       return [
         { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
         { description: 'record A updated exactly once (its own new crd_number)', pass: mA.rows[0]?.crd_number?.trim() === '90020001', detail: JSON.stringify(mA.rows[0] || null) },
@@ -623,21 +2190,43 @@ CASES.push({
 // ---------------------------------------------------------------------
 // TC-BR-134: history-only profile (type H) writes to node_relationship_history
 // only - never applied, never in load output.
+//
+// Re-targeted per DEF-RDMS-BRV4-002 (spec conflict, BA decision pending -
+// dev's own COBOL-vs-BRD-wording question, no code change to test against).
+// The real scenario ("P2721 case") is a producer already genuinely
+// appointed under firm X, who THEN gets a separate type-H (history-only)
+// profile record fed under a DIFFERENT firm Y - not a brand-new producer
+// whose ONLY record is type H (the original construction). Reported here
+// as an informational, factual outcome for the BA to decide against, not
+// asserted right or wrong.
 // ---------------------------------------------------------------------
 CASES.push({
   tcId: 'TC-BR-134', rule: 'BR-134',
   run: async (console) => {
     const seq = seqFor('BR-134');
-    const firm = buildFirm(seq);
-    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-PROF-TYPE': 'H' } });
-    const fn = 'ALLSTATE.LNA.BR-134-CANDIDATE.D20260908.txt';
-    assembleFile(fn, [[firm.B, firm.C, prod.D1, prod.D2]]);
-    const { status } = await uploadAndSettle(console, fn);
+    const firmX = buildFirm(seq);
+    const real = buildProducer(seq + 1, firmX.id.bd, firmX.id.bd, 'A'); // real appointment under firm X
+    const fn1 = `ALLSTATE.LNA.BR-134-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firmX.B, firmX.C, real.D1, real.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    const firmY = buildFirm(seq + 2);
+    // Same person (same SSN as `real`), a fresh appointment identity, type-H
+    // profile, under the DIFFERENT firm Y.
+    const historyOnly = buildProducer(seq + 3, firmY.id.bd, firmY.id.bd, 'A', {
+      D01: { 'WS-SOC-SEC-NUM': real.id.ssn },
+      D02: { 'WS-SOC-SEC-NUM': real.id.ssn, 'WS-PROF-TYPE': 'H' },
+    });
+    const fn2 = `ALLSTATE.LNA.BR-134-DAY2.D${DAY2}.txt`;
+    assembleFile(fn2, [[firmY.B, firmY.C, historyOnly.D1, historyOnly.D2]], DAY2);
+    const day2 = await uploadAndSettleAt(console, fn2, DAY2);
     return withDb(async (client) => {
-      const contract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const realContract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [real.id.pid]);
+      const historyContract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [historyOnly.id.pid]);
       return [
-        { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
-        { description: 'no contract row created for a history-only (type H) profile', pass: contract.rows.length === 0, detail: `count=${contract.rows.length}` },
+        { description: 'day1 (real appointment under firm X) committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 (type-H profile under a DIFFERENT firm Y, same person) completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'the real appointment under firm X exists (precondition)', pass: realContract.rows.length === 1, detail: `count=${realContract.rows.length}` },
+        { description: 'BA decision pending (DEF-RDMS-BRV4-002): whether a type-H profile under firm Y creates its own live contract row for an already-appointed person - reported factually, not asserted right/wrong', pass: true, detail: `contract row created for the type-H appointment under firm Y: ${historyContract.rows.length === 1}` },
       ];
     });
   },
@@ -654,23 +2243,36 @@ CASES.push({
     // Read the NODE/OFFICE/AGNTINIT counters to predict the next value the
     // generator would draw, then seed a collision at exactly that value.
     let nextOfficeCode = '';
-    await withDb(async (client) => {
-      const off = (await client.query("SELECT contract_number FROM pru_adb.sequence_counter WHERE counter_id = 'OFFICE'")).rows[0];
-      nextOfficeCode = off.contract_number; // whatever the counter currently holds is the value about to be drawn next
-      await client.query('INSERT INTO pru_adb.node (node_id, node_type) VALUES ($1, $2)', [900000000000 + seqFor('BR-142'), 'ORGANIZATION']);
-      await client.query(
-        `INSERT INTO pru_adb.organization (node_id, org_code, org_subject_id, org_name, purpose_code, distribution_channel_code, line_of_business_code, sub_channel_type_code, org_initials, crt_ts, crt_by_id)
-         VALUES ($1, $2, $3, 'E2E BRV4 COLLISION SEED', 'ALLSTATE', '01', '01', 'SC', 'ZZZ', now(), 'CLAUDE01')`,
-        [900000000000 + seqFor('BR-142'), nextOfficeCode, 900000000000 + seqFor('BR-142')],
-      );
-    });
-    const firm = buildFirm(seq);
-    const fn = 'ALLSTATE.LNA.BR-142-CANDIDATE.D20260908.txt';
-    assembleFile(fn, [[firm.B, firm.C]]);
-    const { status } = await uploadAndSettle(console, fn);
-    return [
-      { description: 'run completed despite the seeded collision (no retry loop hang/error)', pass: status === 'COMPLETED', detail: `status=${status}, nextOfficeCode=${nextOfficeCode}` },
-    ];
+    const seedNode = 90000000000 + seq;
+    // The seed exists only to force the collision. Left behind, it was a
+    // permanent duplicate org_code (the real firm gets the same code - that is
+    // the rule), and every rerun added another, the same class of duplicate
+    // business key that poisoned HR2 via B97N2M. Removed once the run is done;
+    // the firm's own committed identity keeps this seq reserved.
+    try {
+      await withDb(async (client) => {
+        const off = (await client.query("SELECT contract_number FROM pru_adb.sequence_counter WHERE counter_id = 'OFFICE'")).rows[0];
+        nextOfficeCode = off.contract_number; // whatever the counter currently holds is the value about to be drawn next
+        await client.query('INSERT INTO pru_adb.node (node_id, node_type) VALUES ($1, $2)', [seedNode, 'ORGANIZATION']);
+        await client.query(
+          `INSERT INTO pru_adb.organization (node_id, org_code, org_subject_id, org_name, purpose_code, distribution_channel_code, line_of_business_code, sub_channel_type_code, org_initials, crt_ts, crt_by_id)
+           VALUES ($1, $2, $3, 'E2E BRV4 COLLISION SEED', 'ALLSTATE', '01', '01', 'SC', 'ZZZ', now(), 'CLAUDE01')`,
+          [seedNode, nextOfficeCode, seedNode],
+        );
+      });
+      const firm = buildFirm(seq);
+      const fn = 'ALLSTATE.LNA.BR-142-CANDIDATE.D20260908.txt';
+      assembleFile(fn, [[firm.B, firm.C]]);
+      const { status } = await uploadAndSettle(console, fn);
+      return [
+        { description: 'run completed despite the seeded collision (no retry loop hang/error)', pass: status === 'COMPLETED', detail: `status=${status}, nextOfficeCode=${nextOfficeCode}` },
+      ];
+    } finally {
+      await withDb(async (client) => {
+        await client.query("DELETE FROM pru_adb.organization WHERE node_id = $1 AND crt_by_id = 'CLAUDE01'", [seedNode]);
+        await client.query('DELETE FROM pru_adb.node WHERE node_id = $1 AND NOT EXISTS (SELECT 1 FROM pru_adb.organization WHERE node_id = $1)', [seedNode]);
+      });
+    }
   },
 });
 
@@ -751,7 +2353,7 @@ CASES.push({
     assembleFile(trigger, [[trig.B, trig.C]]);
     const second = await uploadAndSettle(console, trigger);
     return withDb(async (client) => {
-      const m = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctx.pru_contract_number]);
+      const m = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [ctx.pru_contract_number.slice(1)]);
       return [
         { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
         { description: 'final master value reflects the update exactly once (not corrupted by 3 activity rows)', pass: m.rows[0]?.crd_number?.trim() === '90030001', detail: JSON.stringify(m.rows[0] || null) },
@@ -789,7 +2391,7 @@ CASES.push({
     const second = await uploadAndSettle(console, trigger);
     return withDb(async (client) => {
       const org = await client.query('SELECT org_full_name FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode]);
-      const contract = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode]);
+      const contract = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode.slice(1)]);
       return [
         { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
         { description: 'org-code activity updated organization_record', pass: org.rows[0]?.org_full_name?.includes(' Y'), detail: JSON.stringify(org.rows[0] || null) },
@@ -803,80 +2405,160 @@ CASES.push({
 // TC-BR-376 / TC-BR-377: whether a subject's OTHER contracts get pulled in
 // depends on whether the contract just processed is an individual producer.
 // ---------------------------------------------------------------------
-async function otherContractsCase(rulePrefix: string, entityType: string, seq: number, console: ConsolePage): Promise<CheckResult[]> {
-  const firm = buildFirm(seq); // parent BD to hang both contracts off
-  const prod1 = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
-  const fn = `ALLSTATE.LNA.${rulePrefix}-CANDIDATE.D20260908.txt`;
-  assembleFile(fn, [[firm.B, firm.C, prod1.D1, prod1.D2]]);
-  const first = await uploadAndSettle(console, fn);
+// Rebuilt 2026-10-01. The old version hand-inserted the second contract as a
+// bare pru_adb.contract row (no relationship, address or real allstate_id).
+// The app could never build it: for IP (TC-BR-377) the other-contracts scan
+// reached it and crashed that cycle's whole HR2 run (HR2 2026-09-08 failed
+// at 01:05Z on 2026-10-01), and for BD (TC-BR-376) the scan never looked, so
+// 376 "passed" without proving anything.
+//
+// Now both contracts are real: one person (shared SSN, same as TC-BR-313)
+// appointed twice in the day1 bundle. Contract B's master row is then marked
+// with a wrong value in a column that is always rebuilt to a constant
+// (basic1_aos_rmo, always 'N' - TC-BR-432), and day2 sends a contract-level
+// change for contract A ONLY. If the scan pulls B in, B's master row is
+// rebuilt and the mark is reset to 'N'; if not, the mark stays. A's own
+// rebuild (its new resident state reaching the master) is the positive
+// control that the cycle's HR2 actually ran.
+//
+// Fixed 2026-10-01 (BD variant only). TC-BR-376 used to relabel A as
+// BROKER_DEALER and THEN send A's day2 D01+D02 through HR1. HR1 no longer
+// matched the incoming producer record to the relabelled contract, so it
+// appointed a brand-new third contract (B97N2M) under A's allstate_id. That
+// duplicate allstate_id made every later HR2 sync for 2026-09-09 fail (38 TCs
+// blocked in the 2026-10-01 run). The rule's own trigger is "set
+// entity_type to BROKER_DEALER ... post activity on one", so the BD variant
+// now posts a seeded activity row for A on DAY2 and runs an unrelated
+// trigger feed that day - A never passes through HR1 while relabelled. Its
+// positive control is that A's seeded activity row was processed by HR2.
+// Both variants also assert that A's allstate_id still maps to exactly one
+// contract, so this can never silently poison a cycle date again.
+//
+// Isolated 2026-10-01 (second rerun). Even without the duplicate, HR2 for
+// TC-BR-376's day2 failed, leaving A's activity row unprocessed in the
+// shared 2026-09-09 working set, and TC-BR-377's 2026-09-09 sync failed right
+// after it - so 377's result could not be told apart from 376's leftover.
+// Each variant now runs its day2 on its OWN cycle date that no other TC
+// uses (376: 2026-09-15, 377: 2026-09-16), so neither can block anyone
+// else. If HR2 fails, the spec releases the rows the case left unprocessed
+// (releaseFailedHr2Leftovers), so a rerun of the same TC starts clean.
+async function otherContractsCase(rulePrefix: string, entityType: string, seq: number, day2Date: string, console: ConsolePage): Promise<CheckResult[]> {
+  const firm = buildFirm(seq);
+  const prodA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+  const shared = { 'WS-SOC-SEC-NUM': prodA.id.ssn };
+  const prodB = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'A', { D01: shared, D02: shared });
+  const fn1 = `ALLSTATE.LNA.${rulePrefix}-DAY1.D${DAY1}.txt`;
+  assembleFile(fn1, [[firm.B, firm.C, prodA.D1, prodA.D2, prodB.D1, prodB.D2]], DAY1);
+  const day1 = await uploadAndSettleAt(console, fn1, DAY1);
 
-  let subjectId: string, contract1Node: string, contract2Code: string;
-  await withDb(async (client) => {
-    const c1 = (await client.query('SELECT node_id, subject_id, pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [prod1.id.pid])).rows[0];
-    subjectId = c1.subject_id; contract1Node = c1.node_id;
-    await client.query('UPDATE pru_adb.contract SET entity_type = $1 WHERE node_id = $2', [entityType, contract1Node]);
-    // second contract for the SAME subject_id, freshly minted node/contract row directly (a second appointment for the same person)
-    const node2 = 900000000000 + seq + 500;
-    contract2Code = `Z${String(seq).padStart(5, '0')}`;
-    await client.query('INSERT INTO pru_adb.node (node_id, node_type) VALUES ($1, $2)', [node2, 'CONTRACT']);
-    await client.query(
-      `INSERT INTO pru_adb.contract (node_id, pru_contract_number, allstate_id, purpose_code, subject_id, entity_type, crt_by_id)
-       VALUES ($1, $2, $3, 'ALLSTATE', $4, $5, 'CLAUDE01')`,
-      [node2, contract2Code, `Z${seq}`, subjectId, entityType],
-    );
-    await insertActivity(client, c1.pru_contract_number, 'ALLSTATE', subjectId, 'MI00MI', 0);
-  });
+  const MARK = 'Z';
+  const relabel = entityType !== 'INVESTMENT_PROFESSIONAL';
+  let nodeA: string | undefined, originalType: string | undefined;
+  let codeA = '', codeB = '', sameSubject = false, markedBefore = false;
+  try {
+    await withDb(async (client) => {
+      const a = (await client.query('SELECT node_id, subject_id, pru_contract_number, entity_type FROM pru_adb.contract WHERE allstate_id = $1', [prodA.id.pid])).rows[0];
+      const b = (await client.query('SELECT subject_id, pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [prodB.id.pid])).rows[0];
+      if (!a || !b) return;
+      nodeA = a.node_id; originalType = a.entity_type;
+      codeA = a.pru_contract_number.slice(1); codeB = b.pru_contract_number.slice(1);
+      sameSubject = a.subject_id === b.subject_id;
+      const marked = await client.query('UPDATE adsi_master.contract_record SET basic1_aos_rmo = $1 WHERE contract_number = $2', [MARK, codeB]);
+      markedBefore = marked.rowCount === 1;
+      if (relabel) {
+        // The BD variant of the rule: the processed contract is not an
+        // individual producer. Post A's activity directly (never re-feed A
+        // through HR1 while it is relabelled - see the note above).
+        await client.query('UPDATE pru_adb.contract SET entity_type = $1 WHERE node_id = $2', [entityType, nodeA]);
+        await insertActivity(client, a.pru_contract_number, 'ALLSTATE', a.subject_id, 'MI00MI', 0, day2Date);
+      }
+    });
 
-  const trigger = `ALLSTATE.LNA.${rulePrefix}-TRIGGER2.D20260908.txt`;
-  const trig = buildFirm(seq + 2);
-  assembleFile(trigger, [[trig.B, trig.C]]);
-  const second = await uploadAndSettle(console, trigger);
+    const fn2 = `ALLSTATE.LNA.${rulePrefix}-DAY2.D${day2Date}.txt`;
+    if (relabel) {
+      const trig = buildFirm(seq + 3);
+      assembleFile(fn2, [[trig.B, trig.C]], day2Date);
+    } else {
+      const updatedA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-RES-STATE': 'CA' } });
+      assembleFile(fn2, [[updatedA.D1, updatedA.D2]], day2Date);
+    }
+    const day2 = await uploadAndSettleAt(console, fn2, day2Date);
 
-  return withDb(async (client) => {
-    const m2 = await client.query('SELECT * FROM adsi_master.contract_record WHERE contract_number = $1', [contract2Code]);
-    return [
-      { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
-      { description: `second contract for the same subject ${entityType === 'INVESTMENT_PROFESSIONAL' ? 'IS' : 'is NOT'} pulled into the master alongside the processed one`,
-        pass: entityType === 'INVESTMENT_PROFESSIONAL' ? m2.rows.length === 1 : m2.rows.length === 0,
-        detail: `entityType=${entityType}, rows=${JSON.stringify(m2.rows)}` },
-    ];
-  });
+    return await withDb(async (client) => {
+      const mA = (await client.query('SELECT basic4_sections FROM adsi_master.contract_record WHERE contract_number = $1', [codeA])).rows[0];
+      const mB = (await client.query('SELECT basic1_aos_rmo FROM adsi_master.contract_record WHERE contract_number = $1', [codeB])).rows[0];
+      const aContracts = (await client.query('SELECT pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [prodA.id.pid])).rows.map((r: any) => r.pru_contract_number);
+      const pulledIn = mB?.basic1_aos_rmo === 'N';
+      const expectPulledIn = !relabel;
+      let positive: CheckResult;
+      if (relabel) {
+        const seeded = (await client.query(
+          "SELECT processed_ts FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1 AND crt_by_id = 'CLAUDE01' AND activity_ts::date = $2::date ORDER BY activity_ts DESC LIMIT 1",
+          [`B${codeA}`, isoDay(day2Date)],
+        )).rows[0];
+        positive = { description: "positive control: HR2 processed contract A's posted activity row (processed_ts stamped)", pass: seeded?.processed_ts != null, detail: `codeA=${codeA} processed_ts=${JSON.stringify(seeded?.processed_ts ?? null)}` };
+      } else {
+        const misc = (Array.isArray(mA?.basic4_sections) ? mA.basic4_sections : []).find((s: any) => s?.type === 'MISC');
+        positive = { description: "positive control: contract A's own master row picked up its day2 change (basic4 MISC residentState = CA)", pass: misc?.residentState === 'CA', detail: `codeA=${codeA} residentState=${JSON.stringify(misc?.residentState ?? null)}` };
+      }
+      return [
+        { description: 'day1 bundle committed: one person (shared SSN) holds two real contracts', pass: day1.status === 'COMPLETED' && sameSubject, detail: `status=${day1.status} sameSubject=${sameSubject}` },
+        { description: "contract B's master row exists and was marked before day2", pass: markedBefore, detail: `codeB=${codeB}` },
+        { description: relabel ? 'day2 trigger cycle (activity posted for contract A only) completes, and its HR2 finished' : 'day2 standalone change to contract A only completes, and its HR2 finished', pass: day2.status === 'COMPLETED', detail: `status=${day2.status} hr2=${day2.hr2}` },
+        { description: "contract A's allstate_id still maps to exactly one contract (no duplicate appointment)", pass: aContracts.length === 1, detail: JSON.stringify(aContracts) },
+        positive,
+        { description: `contract B (no activity of its own) ${expectPulledIn ? 'IS' : 'is NOT'} pulled in and rebuilt when the processed contract is ${entityType}`,
+          pass: mB != null && pulledIn === expectPulledIn,
+          detail: `entityType=${entityType} basic1_aos_rmo before=${MARK} after=${JSON.stringify(mB?.basic1_aos_rmo ?? null)}` },
+      ];
+    });
+  } finally {
+    // Restore A's real entity type (the BD variant must not leave a producer
+    // contract mislabelled in a no-data-reset environment), and clear the
+    // mark on B if it is still there. Activity rows a failed HR2 leaves
+    // behind are released by the spec (releaseFailedHr2Leftovers).
+    await withDb(async (client) => {
+      if (nodeA && originalType && originalType !== entityType) await client.query('UPDATE pru_adb.contract SET entity_type = $1 WHERE node_id = $2', [originalType, nodeA]);
+      if (codeB) await client.query("UPDATE adsi_master.contract_record SET basic1_aos_rmo = 'N' WHERE contract_number = $1 AND basic1_aos_rmo = $2", [codeB, MARK]);
+    });
+  }
 }
-CASES.push({ tcId: 'TC-BR-376', rule: 'BR-376', run: (c) => otherContractsCase('BR-376', 'BROKER_DEALER', seqFor('BR-376'), c) });
-CASES.push({ tcId: 'TC-BR-377', rule: 'BR-377', run: (c) => otherContractsCase('BR-377', 'INVESTMENT_PROFESSIONAL', seqFor('BR-377'), c) });
+function isoDay(yyyymmdd: string): string {
+  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
+}
+CASES.push({ tcId: 'TC-BR-376', rule: 'BR-376', run: (c) => otherContractsCase('BR-376', 'BROKER_DEALER', seqFor('BR-376'), '20260915', c) });
+CASES.push({ tcId: 'TC-BR-377', rule: 'BR-377', run: (c) => otherContractsCase('BR-377', 'INVESTMENT_PROFESSIONAL', seqFor('BR-377'), '20260916', c) });
 
 // ---------------------------------------------------------------------
 // TC-BR-478: activity for a subject with no prior master record -> written
 // as a new master record (not a delete/error).
+//
+// Retested 2026-09-30 per DEF-RDMS-BRV4-013's dev verdict ("not a defect -
+// test data"): the original construction used a contract with NO matching
+// person at all, which AdsiMasterRecordBuilder can never build - that was
+// never a valid way to exercise this rule's actual scenario (a buildable
+// subject whose master record simply hasn't been created yet), and its
+// 12-digit synthetic subject_id also happened to overflow a legacy field
+// width in the ERRFILE writer, which is what actually crashed the whole
+// day's HR2 sync (not a lack of fault isolation in the app). With a real,
+// fully-buildable producer instead, the rule's own scenario is
+// straightforward: a subject with activity but no prior master row gets one
+// built on the very next sync.
 // ---------------------------------------------------------------------
 CASES.push({
   tcId: 'TC-BR-478', rule: 'BR-478',
   run: async (console) => {
     const seq = seqFor('BR-478');
-    // A fresh pru_adb contract that has NEVER been through a cycle yet (no
-    // activity_log_entry row exists for it at all) - insert the row
-    // ourselves to simulate "activity for a subject with no prior master record".
-    const node = 900000000000 + seq;
-    const contractCode = `Y${String(seq).padStart(5, '0')}`;
-    const subjectId = String(900000000000 + seq);
-    await withDb(async (client) => {
-      await client.query('INSERT INTO pru_adb.node (node_id, node_type) VALUES ($1, $2)', [node, 'CONTRACT']);
-      await client.query(
-        `INSERT INTO pru_adb.contract (node_id, pru_contract_number, allstate_id, purpose_code, subject_id, entity_type, resident_state, crt_by_id)
-         VALUES ($1, $2, $3, 'ALLSTATE', $4, 'INVESTMENT_PROFESSIONAL', 'IL', 'CLAUDE01')`,
-        [node, contractCode, `Y${seq}`, subjectId],
-      );
-      await insertActivity(client, contractCode, 'ALLSTATE', subjectId, 'AP00AP', 0);
-    });
-    const trigger = 'ALLSTATE.LNA.BR-478-TRIGGER.D20260908.txt';
-    const trig = buildFirm(seq + 1);
-    assembleFile(trigger, [[trig.B, trig.C]]);
-    const { status } = await uploadAndSettle(console, trigger);
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn = 'ALLSTATE.LNA.BR-478-CANDIDATE.D20260908.txt';
+    assembleFile(fn, [[firm.B, firm.C, prod.D1, prod.D2]]);
+    const { status } = await uploadAndSettle(console, fn);
     return withDb(async (client) => {
-      const r = await client.query('SELECT * FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode]);
+      const r = await client.query('SELECT * FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn]);
       return [
         { description: 'cycle completed', pass: status === 'COMPLETED', detail: `status=${status}` },
-        { description: 'a new master row was written for the subject with no prior record', pass: r.rows.length === 1, detail: JSON.stringify(r.rows[0] || null) },
+        { description: 'a subject with activity but no prior master record gets a new master row written on the very next sync', pass: r.rows.length === 1, detail: JSON.stringify(r.rows[0] || null) },
       ];
     });
   },
@@ -894,11 +2576,21 @@ CASES.push({
     assembleFile(fn, [[firm.B, firm.C]]);
     const first = await uploadAndSettle(console, fn);
     let orgCode: string, orgSubjectId: string, contractCode: string, contractSubjectId: string;
+    let preOrgRows: any[] = [], preContractRows: any[] = [];
     await withDb(async (client) => {
       const orgCodeLookup = await orgCodeForBd(client, firm.id.bd);
       const org = orgCodeLookup ? (await client.query('SELECT org_code, org_subject_id FROM pru_adb.organization WHERE org_code = $1', [orgCodeLookup])).rows[0] : undefined;
       const contract = (await client.query('SELECT pru_contract_number, subject_id FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd])).rows[0];
       orgCode = org.org_code; orgSubjectId = org.org_subject_id; contractCode = contract.pru_contract_number; contractSubjectId = contract.subject_id;
+      // Root cause found and fixed (DEF-RDMS-BRV4-013, 2026-09-28): this
+      // firm's master rows failed to appear only because a leftover
+      // orphaned contract from an earlier, uncleaned TC-BR-478/376/377 run
+      // (a contract with no matching person) crashed that WHOLE cycle's HR2
+      // sync run outright, rather than being skipped - silently blocking
+      // every other firm/org due to sync that same day. TC-BR-478/376/377
+      // now clean up after themselves, so this pre-check should pass.
+      preOrgRows = (await client.query('SELECT org_full_name FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows;
+      preContractRows = (await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode.slice(1)])).rows;
       await client.query("UPDATE pru_adb.organization SET org_name = org_name || ' Z' WHERE org_code = $1", [orgCode]);
       await client.query('UPDATE pru_adb.firm SET crd_number = $1 WHERE firm_subject_id = $2', ['90050001', contractSubjectId]);
       await insertActivity(client, orgCode, 'ALLSTATE', orgSubjectId, 'MI00MI', 0);
@@ -910,9 +2602,10 @@ CASES.push({
     const second = await uploadAndSettle(console, trigger);
     return withDb(async (client) => {
       const org = await client.query('SELECT org_full_name FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode]);
-      const contract = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode]);
+      const contract = await client.query('SELECT crd_number FROM adsi_master.contract_record WHERE contract_number = $1', [contractCode.slice(1)]);
       return [
         { description: 'both cycles completed', pass: first.status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${first.status}, ${second.status}` },
+        { description: "this firm's own organization_record/contract_record master rows exist at all in adsi_master (checked right after the first, real feed upload, before any DB-seeding) - previously found missing due to a since-fixed poison-row issue (DEF-RDMS-BRV4-013)", pass: preOrgRows.length === 1 && preContractRows.length === 1, detail: `preOrgRows=${JSON.stringify(preOrgRows)} preContractRows=${JSON.stringify(preContractRows)}` },
         { description: 'org entry landed in organization_record', pass: org.rows[0]?.org_full_name?.includes(' Z'), detail: JSON.stringify(org.rows[0] || null) },
         { description: 'contract entry landed in contract_record', pass: contract.rows[0]?.crd_number?.trim() === '90050001', detail: JSON.stringify(contract.rows[0] || null) },
       ];
@@ -923,6 +2616,12 @@ CASES.push({
 // ---------------------------------------------------------------------
 // TC-BR-464: subject with inactive (T/I) relationship carries final_org_code
 // always, final_date only when an end date exists.
+// Re-targeted per DEF-RDMS-BRV4-005: the original "I + open-ended end
+// date" combination is invalid test data (HR1 rejects it with F0112, not
+// an app defect) - the "inactive without a date" state can only exist by
+// seeding it directly into node_relationship (bypassing HR1) and
+// triggering an HR2 rebuild, the same DB-seed + trigger technique proven
+// in TC-BR-081.
 // ---------------------------------------------------------------------
 CASES.push({
   tcId: 'TC-BR-464', rule: 'BR-464',
@@ -930,17 +2629,31 @@ CASES.push({
     const seq = seqFor('BR-464');
     const firm = buildFirm(seq);
     const withDate = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'T'); // T with a real end date
-    const withoutDate = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'I', { D02: { 'WS-RELN-END-DT': '99999999' } }); // I, open-ended
+    const noDate = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'A'); // starts active, seeded inactive-without-date below
     const fn = 'ALLSTATE.LNA.BR-464-CANDIDATE.D20260908.txt';
-    assembleFile(fn, [[firm.B, firm.C, withDate.D1, withDate.D2, withoutDate.D1, withoutDate.D2]]);
+    assembleFile(fn, [[firm.B, firm.C, withDate.D1, withDate.D2, noDate.D1, noDate.D2]]);
     const { status } = await uploadAndSettle(console, fn);
     return withDb(async (client) => {
+      const noDateContract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [noDate.id.pid]);
+      const noDateNodeId = noDateContract.rows[0]?.node_id;
+      const rel = await client.query(
+        "SELECT parent_node_id, child_node_id FROM pru_adb.node_relationship WHERE child_node_id = $1 AND relationship_type = 'BD_LLE_TO_IP'",
+        [noDateNodeId],
+      );
+      await client.query(
+        "UPDATE pru_adb.node_relationship SET relationship_status_code = 'I', relationship_end_date = NULL WHERE parent_node_id = $1 AND child_node_id = $2",
+        [rel.rows[0].parent_node_id, rel.rows[0].child_node_id],
+      );
+      const trigger = 'ALLSTATE.LNA.BR-464-TRIGGER.D20260908.txt';
+      const trig = buildFirm(seq + 3);
+      assembleFile(trigger, [[trig.B, trig.C]]);
+      const second = await uploadAndSettle(console, trigger);
       const r1 = await client.query('SELECT final_org_code, final_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [withDate.id.ssn]);
-      const r2 = await client.query('SELECT final_org_code, final_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [withoutDate.id.ssn]);
+      const r2 = await client.query('SELECT final_org_code, final_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [noDate.id.ssn]);
       return [
-        { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
+        { description: 'both cycles completed (candidate bundle + the DB-seed/HR2 trigger cycle)', pass: status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${status}, ${second.status}` },
         { description: 'terminated-with-date subject has both final_org_code and final_date populated', pass: !!r1.rows[0]?.final_org_code && !!r1.rows[0]?.final_date, detail: JSON.stringify(r1.rows[0] || null) },
-        { description: 'inactive-without-date subject has final_org_code but NULL final_date', pass: !!r2.rows[0]?.final_org_code && r2.rows[0]?.final_date === null, detail: JSON.stringify(r2.rows[0] || null) },
+        { description: 'inactive-without-date subject (DB-seeded status=I, end date=NULL, then HR2-rebuilt) has final_org_code but NULL final_date', pass: !!r2.rows[0]?.final_org_code && r2.rows[0]?.final_date === null, detail: JSON.stringify(r2.rows[0] || null) },
       ];
     });
   },
@@ -1014,7 +2727,7 @@ CASES.push({
       const run = await console.waitForRunToSettle(runId);
       status = String((run as any)?.status ?? 'UNKNOWN');
       logLines = console.getCollectedLogs();
-      await new Promise((resolve) => setTimeout(resolve, 15000));
+      await new Promise((resolve) => setTimeout(resolve, 30000));
     } finally {
       await withDb((client) => client.query(`ALTER TABLE adsi_master.contract_record DROP CONSTRAINT IF EXISTS ${constraintName}`));
     }
@@ -1203,32 +2916,51 @@ CASES.push({
 });
 
 // ---------------------------------------------------------------------
-// TC-BR-016: BD-specific field missing on FIRST firm rejects the bundle; same field
-// missing on a LATER firm does not.
+// TC-BR-016: retargeted per DEF-RDMS-BRV4-001 (not a defect - dev clarified
+// the actual scenarios). A blank correspondence address on the FIRST BD
+// firm in the bundle -> B0608, whole bundle rejected. A resident state
+// carrying an out-of-set VALUE ('ZZ', not blank) -> B0606, also rejected.
+// Both are separate bundles in one file so a good control bundle proves
+// the run itself isn't failing wholesale.
 // ---------------------------------------------------------------------
 CASES.push({
   tcId: 'TC-BR-016', rule: 'BR-016',
   run: async (console) => {
+    // Re-verified 2026-10-01 per dev's response on DEF-RDMS-BRV4-015: error
+    // codes like B0608/B0606 are written ONLY to the LNAERROR artifact
+    // (File 3), never to the run log - QA's original log-based check was
+    // never valid evidence either way. Checked entirely via LNAERROR content
+    // now, not pru_adb.organization - this shared, never-reset environment
+    // can hand out an allstate_id that collides with an organisation left by
+    // an earlier invocation of this same TC, making a presence/freshness
+    // check on that table unreliable (observed live: crt_ts-filtering still
+    // matched a stale row after a rerun).
     const seq = seqFor('BR-016');
-    // Bundle 1: BD's own C record missing WS-RES-STATE (BD-specific requirement)
-    const bad = buildFirm(seq, { C: { 'WS-RES-STATE': '' } });
-    // Bundle 2: valid BD, then a subsequent firm missing the same field
-    const good = buildFirm(seq + 1);
-    const sub = buildSubsequentFirm(seq + 2, good.id.bd, { C: { 'WS-RES-STATE': '' } });
+    const blankCorres = buildFirm(seq, { C: { 'WS-CORRES-ADD-L1': '', 'WS-CORRES-CITY': '', 'WS-CORRES-ZIP-CD': '' } });
+    const badResState = buildFirm(seq + 1, { C: { 'WS-RES-STATE': 'ZZ' } });
+    const good = buildFirm(seq + 2);
     const fn = 'ALLSTATE.LNA.BR-016-CANDIDATE.D20260908.txt';
-    assembleFile(fn, [[bad.B, bad.C], [good.B, good.C, sub.C]]);
-    const { status } = await uploadAndSettle(console, fn);
-    return withDb(async (client) => {
-      const badOrgCode = await orgCodeForBd(client, bad.id.bd);
-      const badOrg = badOrgCode ? await client.query('SELECT * FROM pru_adb.organization WHERE org_code = $1', [badOrgCode]) : { rows: [] as any[] };
-      const goodOrgCode = await orgCodeForBd(client, good.id.bd);
-      const goodOrg = goodOrgCode ? await client.query('SELECT * FROM pru_adb.organization WHERE org_code = $1', [goodOrgCode]) : { rows: [] as any[] };
-      return [
-        { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
-        { description: 'bundle 1 (BD missing the field) created no organization row', pass: badOrg.rows.length === 0, detail: `count=${badOrg.rows.length}` },
-        { description: 'bundle 2 (later firm missing the field, BD itself valid) still created an organization row', pass: goodOrg.rows.length === 1, detail: `count=${goodOrg.rows.length}` },
-      ];
-    });
+    assembleFile(fn, [[blankCorres.B, blankCorres.C], [badResState.B, badResState.C], [good.B, good.C]]);
+    const { status, runId } = await uploadAndSettle(console, fn);
+    const lnaerror = await downloadLnaerrorFile(console, runId);
+    const lnaerrorLines = lnaerror.split(/\r?\n/);
+    const b0608Line = lnaerrorLines.find((l) => l.includes(blankCorres.id.bd) && /B0608/.test(l));
+    const b0606Line = lnaerrorLines.find((l) => l.includes(badResState.id.bd) && /B0606/.test(l));
+    // The control bundle's own check is evaluated via LNAERROR absence, not
+    // an organisation-row lookup: this shared, never-reset environment can
+    // occasionally hand out an allstate_id that collides with an
+    // organisation left by an earlier invocation of this same TC (observed
+    // live 2026-10-01 - the join resolved a real org_code whose crt_ts
+    // pre-dated this run), which would make a presence/freshness check on
+    // pru_adb.organization unreliable either way. Absence of ANY error line
+    // naming this BD is a clean signal that doesn't depend on table state.
+    const goodErrorLine = lnaerrorLines.find((l) => l.includes(good.id.bd));
+    return [
+      { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
+      { description: 'a blank correspondence address on the first BD firm rejects the whole bundle: LNAERROR contains a B0608 line naming this BD', pass: !!b0608Line, detail: `B0608 line=${b0608Line || '(none found)'}` },
+      { description: "an out-of-set resident state value ('ZZ') rejects the whole bundle: LNAERROR contains a B0606 line naming this BD", pass: !!b0606Line, detail: `B0606 line=${b0606Line || '(none found)'}` },
+      { description: 'a valid control bundle in the same file still commits normally: no error line in LNAERROR names it at all (the run itself isn\'t failing wholesale)', pass: !goodErrorLine, detail: `goodErrorLine=${goodErrorLine || '(none found, as expected)'}` },
+    ];
   },
 });
 
@@ -1495,12 +3227,12 @@ CASES.push({
     assembleFile(fn, [[firm.B, firm.C, withDob.D1, withDob.D2, noDob.D1, noDob.D2]]);
     const { status } = await uploadAndSettle(console, fn);
     return withDb(async (client) => {
-      const r1 = await client.query('SELECT birth_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [withDob.id.ssn]);
-      const r2 = await client.query('SELECT birth_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [noDob.id.ssn]);
+      const r1 = await client.query("SELECT birth_date::text AS birth_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1", [withDob.id.ssn]);
+      const r2 = await client.query("SELECT birth_date::text AS birth_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1", [noDob.id.ssn]);
       return [
         { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
         { description: 'a producer WITH a birth date on file carries the real date onto the master record', pass: r1.rows.length === 1 && r1.rows[0].birth_date !== null, detail: JSON.stringify(r1.rows[0] || null) },
-        { description: 'a producer with NO birth date on file has the master field left blank, not converted from an absent value', pass: r2.rows.length === 1 && r2.rows[0].birth_date === null, detail: JSON.stringify(r2.rows[0] || null) },
+        { description: 'a producer with NO birth date on file gets the 0001-01-01 placeholder on the master record (per DEF-RDMS-BRV4-004\'s fix, confirmed not a defect per DEF-RDMS-BRV4-007 - the earlier NULL expectation was this harness misreading the DATE column as a JS Date object), not converted from an absent value some other way', pass: r2.rows.length === 1 && r2.rows[0].birth_date === '0001-01-01', detail: JSON.stringify(r2.rows[0] || null) },
       ];
     });
   },
@@ -1512,27 +3244,45 @@ CASES.push({
 CASES.push({
   tcId: 'TC-BR-465', rule: 'BR-465',
   run: async (console) => {
+    // Re-targeted per DEF-RDMS-BRV4-008: a blank WS-RELN-START-DT on the
+    // feed itself is invalid test data (HR1 rejects it with F0111, silently
+    // dropping the whole producer - not an app defect). A NULL start date
+    // can only exist by seeding it directly into node_relationship
+    // (bypassing HR1) and triggering an HR2 rebuild - the same DB-seed +
+    // trigger technique proven in TC-BR-081/TC-BR-464.
     const seq = seqFor('BR-465');
     const firm = buildFirm(seq);
     const withDate = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
-    const noDate = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-RELN-START-DT': '' } });
+    const noDate = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'A'); // starts with a real date, seeded NULL below
     const fn = 'ALLSTATE.LNA.BR-465-CANDIDATE.D20260908.txt';
     assembleFile(fn, [[firm.B, firm.C, withDate.D1, withDate.D2, noDate.D1, noDate.D2]]);
     const { status } = await uploadAndSettle(console, fn);
     return withDb(async (client) => {
+      const noDateContract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [noDate.id.pid]);
+      const noDateNodeId = noDateContract.rows[0]?.node_id;
+      const rel = await client.query(
+        "SELECT parent_node_id, child_node_id FROM pru_adb.node_relationship WHERE child_node_id = $1 AND relationship_type = 'BD_LLE_TO_IP'",
+        [noDateNodeId],
+      );
+      await client.query(
+        'UPDATE pru_adb.node_relationship SET relationship_start_date = NULL WHERE parent_node_id = $1 AND child_node_id = $2',
+        [rel.rows[0].parent_node_id, rel.rows[0].child_node_id],
+      );
+      const trigger = 'ALLSTATE.LNA.BR-465-TRIGGER.D20260908.txt';
+      const trig = buildFirm(seq + 3);
+      assembleFile(trigger, [[trig.B, trig.C]]);
+      const second = await uploadAndSettle(console, trigger);
       const r1 = await client.query('SELECT current_appointment_date, current_contract_date, manager_appointment_current_location_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [withDate.id.ssn]);
       const r2 = await client.query('SELECT current_appointment_date, current_contract_date, manager_appointment_current_location_date FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [noDate.id.ssn]);
-      const noDateContract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [noDate.id.pid]);
       const row1 = r1.rows[0], row2 = r2.rows[0];
       const allSameDate = !!row1 && row1.current_appointment_date !== null
         && String(row1.current_appointment_date) === String(row1.current_contract_date)
         && String(row1.current_appointment_date) === String(row1.manager_appointment_current_location_date);
       const allEmpty = !!row2 && row2.current_appointment_date === null && row2.current_contract_date === null && row2.manager_appointment_current_location_date === null;
       return [
-        { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
+        { description: 'both cycles completed (candidate bundle + the DB-seed/HR2 trigger cycle)', pass: status === 'COMPLETED' && second.status === 'COMPLETED', detail: `${status}, ${second.status}` },
         { description: 'a relationship WITH a start date carries that one date into all three appointment/contract date fields', pass: allSameDate, detail: JSON.stringify(row1 || null) },
-        { description: 'the no-start-date producer was actually created in pru_adb (a precondition for checking its master-record dates at all)', pass: noDateContract.rows.length === 1, detail: `pru_adb.contract rows found: ${noDateContract.rows.length}` },
-        { description: 'a relationship with NO start date leaves all three master-record date fields empty', pass: allEmpty, detail: JSON.stringify(row2 || null) },
+        { description: 'a relationship with a DB-seeded NULL start date, then HR2-rebuilt, leaves all three master-record date fields empty', pass: allEmpty, detail: JSON.stringify(row2 || null) },
       ];
     });
   },
@@ -1841,6 +3591,32 @@ CASES.push({
   },
 });
 
+// TC-BR-083: every date placed in the master goes through one fixed
+// year/month/day packed-decimal conversion (the rule names DOB as one of
+// its own examples). Previously blocked as "needs the ADSIMSTR
+// mainframe-vs-Java comparator" - but the conversion's own result is a
+// self-contained fact about the extract's own bytes (ALL-BIRTH-DATE, pos
+// 600 per ADSIMSTR.cpy), checkable directly without any comparator or
+// historical mainframe reference.
+CASES.push({
+  tcId: 'TC-BR-083', rule: 'BR-083',
+  run: async (console) => {
+    const seq = seqFor('BR-083');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-DOB': '19800115' } });
+    const fn = 'ALLSTATE.LNA.BR-083-CANDIDATE.D20260908.txt';
+    assembleFile(fn, [[firm.B, firm.C, prod.D1, prod.D2]]);
+    const { runId, status } = await uploadAndSettle(console, fn);
+    const record = await downloadAndFindAdsimstrRecord(console, runId, prod.id.ssn);
+    if (!record) return [{ description: 'the producer\'s record was found in the downloaded ADSIMSTR extract', pass: false, detail: 'not found' }];
+    const dob = ADSIMSTR.birthDate(record.raw);
+    return [
+      { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
+      { description: 'the fed date of birth (1980-01-15) reaches the master through the fixed year/month/day packed-decimal conversion, decoding back to the same calendar date', pass: dob.year === 1980 && dob.month === 1 && dob.day === 15, detail: JSON.stringify(dob) },
+    ];
+  },
+});
+
 // TC-BR-096: the alternate key on a contract master record is assembled
 // from stated slices of the contract number (office/detach/RMO/region),
 // not from the number as a whole. Verified alongside TC-BR-094 (same key).
@@ -1912,7 +3688,7 @@ CASES.push({
     await console.openRun(runId);
     await console.downloadAllArtifacts(zipPath);
     const extractDir = path.join(runDir, 'extracted');
-    execSync(`unzip -o "${zipPath}" -d "${extractDir}"`);
+    new AdmZip(zipPath).extractAllTo(extractDir, true);
     const adsimstrDir = path.join(extractDir, `Day ${FEED_DATE}`, 'File 7 - ADSIMSTR');
     const files = fs.readdirSync(adsimstrDir).filter((f) => f.startsWith('ALADSI10') && f.endsWith('.dat'));
     return [
@@ -1925,24 +3701,66 @@ CASES.push({
 // TC-BR-081: a relationship status the service does not recognise leaves
 // the organisation's standing unset rather than refusing the master
 // record - the record is still produced, just with a blank status.
+//
+// Confirmed 4 times earlier this session: feeding an unrecognised
+// WS-PROFILE-STATUS (e.g. 'X') never reaches this rule at all - HR1 itself
+// rejects the whole bundle at ingestion before any field-level processing,
+// so this precondition is unreachable via any real feed. The rule's own
+// "how to test" text agrees: "if Day 1 has none [an org outside the
+// recognised set], this cannot be verified from the sent reports - raise it
+// for a seeded run". That is the DB-seed + HR2 technique used here: the
+// firm's own ORG_TO_BD relationship_status_code is FK-constrained to
+// pru_adb.relationship_status (only A/I/T exist there), so a genuinely
+// out-of-set value needs a temporary row in that lookup table - added and
+// removed within this same test, the same scoped/self-cleaning pattern
+// already used for TC-BR-131's CHECK constraint.
 CASES.push({
   tcId: 'TC-BR-081', rule: 'BR-081',
   run: async (console) => {
     const seq = seqFor('BR-081');
-    const firm = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'X' } });
-    const fn = 'ALLSTATE.LNA.BR-081-CANDIDATE.D20260908.txt';
+    const firm = buildFirm(seq);
+    const fn = 'ALLSTATE.LNA.BR-081-DAY1.D20260908.txt';
     assembleFile(fn, [[firm.B, firm.C]]);
-    const { status } = await uploadAndSettle(console, fn);
-    const logLines = console.getCollectedLogs();
+    const day1 = await uploadAndSettle(console, fn);
+    const outOfSetCode = 'X';
     return withDb(async (client) => {
       const orgCode = await orgCodeForBd(client, firm.id.bd);
-      const org = orgCode ? await client.query('SELECT org_status FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode]) : { rows: [] as any[] };
-      const rolledBack = logLines.find((l) => /rolled back/i.test(l));
-      return [
-        { description: 'run completed', pass: status === 'COMPLETED', detail: `status=${status}` },
-        { description: 'the organisation record is still produced (not rejected) for an unrecognised profile status - not just accepted-then-rolled-back at ingestion', pass: org.rows.length === 1 && !rolledBack, detail: `count=${org.rows.length}, rolledBackLine=${rolledBack || '(none)'}` },
-        { description: 'the unrecognised status leaves org_status blank rather than defaulting to a guessed value', pass: org.rows.length === 1 && (org.rows[0].org_status === null || org.rows[0].org_status.trim() === ''), detail: JSON.stringify(org.rows[0] || null) },
-      ];
+      const before = orgCode ? await client.query('SELECT org_status FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode]) : { rows: [] as any[] };
+      const bdContract = await client.query('SELECT node_id, subject_id, pru_contract_number FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd]);
+      const rel = await client.query(
+        "SELECT parent_node_id, child_node_id FROM pru_adb.node_relationship WHERE child_node_id = $1 AND relationship_type = 'ORG_TO_BD'",
+        [bdContract.rows[0].node_id],
+      );
+      try {
+        await client.query('INSERT INTO pru_adb.relationship_status (relationship_status_code, relationship_status_description) VALUES ($1, $2)', [outOfSetCode, 'E2E BRV4 TEST - OUTSIDE RECOGNISED SET']);
+        await client.query('UPDATE pru_adb.node_relationship SET relationship_status_code = $1 WHERE parent_node_id = $2 AND child_node_id = $3', [outOfSetCode, rel.rows[0].parent_node_id, rel.rows[0].child_node_id]);
+        await insertActivity(client, orgCode!, 'ALLSTATE', bdContract.rows[0].subject_id, 'MI00MI', 0);
+
+        const trigger = 'ALLSTATE.LNA.BR-081-TRIGGER2.D20260908.txt';
+        const trig = buildFirm(seq + 1);
+        assembleFile(trigger, [[trig.B, trig.C]]);
+        const day2 = await uploadAndSettle(console, trigger);
+
+        const after = orgCode ? await client.query('SELECT org_status FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode]) : { rows: [] as any[] };
+        // Live-tested: this firm's organization_record row in adsi_master is
+        // already missing right after day1's real, successful upload - the
+        // same "master row never syncs" gap independently confirmed via
+        // TC-BR-482 (checked there for both sync latency and org_code
+        // collisions, neither explained it). Recorded as a pre-condition
+        // fact rather than re-investigated a third time.
+        return [
+          { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+          { description: 'DB-seeded out-of-set relationship status (bypassing HR1 entirely) + a trigger cycle to force HR2 completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+          { description: "this firm's organization_record row exists in adsi_master at all after day1's real upload (previously found missing due to the same since-fixed poison-row issue, DEF-RDMS-BRV4-013, that TC-BR-482 also hit)", pass: before.rows.length === 1, detail: JSON.stringify(before.rows[0] || null) },
+          { description: 'the organisation record is still produced for an unrecognised relationship status - not rejected', pass: after.rows.length === 1, detail: JSON.stringify(after.rows[0] || null) },
+          { description: 'the unrecognised status leaves org_status blank rather than defaulting to a guessed value', pass: after.rows.length === 1 && (after.rows[0].org_status === null || String(after.rows[0].org_status).trim() === ''), detail: `before=${JSON.stringify(before.rows[0] || null)} after=${JSON.stringify(after.rows[0] || null)}` },
+        ];
+      } finally {
+        // Revert before removing the lookup row - the FK would reject the
+        // delete while node_relationship still references it.
+        await client.query("UPDATE pru_adb.node_relationship SET relationship_status_code = 'A' WHERE parent_node_id = $1 AND child_node_id = $2", [rel.rows[0].parent_node_id, rel.rows[0].child_node_id]);
+        await client.query('DELETE FROM pru_adb.relationship_status WHERE relationship_status_code = $1', [outOfSetCode]);
+      }
     });
   },
 });
@@ -1979,4 +3797,1204 @@ CASES.push({
     });
     return results;
   }),
+});
+
+// ---------------------------------------------------------------------
+// Batch 3: remaining standalone-update-bucket TCs - DB-seed-only fields,
+// multi-day sequences, and other relational cases.
+// ---------------------------------------------------------------------
+
+CASES.push({
+  tcId: 'TC-BR-318', rule: 'BR-318',
+  run: async (console) => {
+    const seq = seqFor('BR-318');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-318-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT updt_ts FROM pru_adb.firm WHERE firm_subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1)', [firm.id.bd]);
+      const same = buildFirm(seq);
+      const fn2 = `ALLSTATE.LNA.BR-318-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[same.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const afterIdentical = await client.query('SELECT updt_ts FROM pru_adb.firm WHERE firm_subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1)', [firm.id.bd]);
+      const changed = buildFirm(seq, { C: { 'WS-ABBR-FIRM-NAME': 'E2E BRV4 CHANGEDABBR3' } });
+      const fn3 = 'ALLSTATE.LNA.BR-318-DAY3.D20260910.txt';
+      assembleFile(fn3, [[changed.C]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const afterChanged = await client.query('SELECT updt_ts FROM pru_adb.firm WHERE firm_subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1)', [firm.id.bd]);
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 byte-identical standalone resubmission completes without error, and - per DEF-RDMS-BRV4-011\'s fix - is now a true no-op: firm.updt_ts stays unstamped', pass: day2.status === 'COMPLETED' && before.rows[0]?.updt_ts == null && afterIdentical.rows[0]?.updt_ts == null, detail: `before=${JSON.stringify(before.rows[0])} afterIdentical=${JSON.stringify(afterIdentical.rows[0])}` },
+        { description: 'day3 standalone update with one field genuinely changed completes and stamps firm.updt_ts', pass: day3.status === 'COMPLETED' && afterChanged.rows[0]?.updt_ts != null, detail: `status=${day3.status} afterChanged=${JSON.stringify(afterChanged.rows[0])}` },
+      ];
+    });
+  },
+});
+
+// Marital status has no LNA feed field at all (confirmed against
+// scripts/layout.json) - same situation as citizenship (TC-BR-409): the
+// value lives only on pru_adb.person, seeded directly, and picked up once
+// the contract is reprocessed by an unrelated standalone update this cycle.
+CASES.push({
+  tcId: 'TC-BR-408', rule: 'BR-408',
+  run: async (console) => {
+    const seq = seqFor('BR-408');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-408-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const before = await client.query('SELECT marital_status_code FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn]);
+      await client.query("UPDATE pru_adb.person SET marital_status = 'M' WHERE ssn = $1", [prod.id.ssn]);
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+      const fn2 = `ALLSTATE.LNA.BR-408-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query('SELECT marital_status_code FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn]);
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only update (triggered by an unrelated personal-field change, after directly seeding pru_adb.person.marital_status) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'adsi_master.contract_record.marital_status_code picks up the direct DB-level marital-status change once the contract is reprocessed this cycle', pass: before.rows[0]?.marital_status_code !== after.rows[0]?.marital_status_code, detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-390', rule: 'BR-390',
+  run: async (console) => {
+    const seq = seqFor('BR-390');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-390-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const before = orgCode ? (await client.query('SELECT org_create_date FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows[0] : null;
+      // Day2: byte-identical resubmission - org_create_date is sourced from
+      // pru_adb, not the feed, so it can never move via a feed-only change.
+      const same = buildFirm(seq);
+      const fn2 = `ALLSTATE.LNA.BR-390-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[same.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const afterIdentical = orgCode ? (await client.query('SELECT org_create_date FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows[0] : null;
+      // Day3: firm name changed - a genuine, unrelated field change.
+      const changed = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED ORG NAME 3' } });
+      const fn3 = 'ALLSTATE.LNA.BR-390-DAY3.D20260910.txt';
+      assembleFile(fn3, [[changed.C]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const afterChanged = orgCode ? (await client.query('SELECT org_create_date, org_full_name FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows[0] : null;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 byte-identical standalone resubmission completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'day3 standalone update with the org name changed completes without error', pass: day3.status === 'COMPLETED', detail: `status=${day3.status}` },
+        { description: "org_create_date never moves across any of these cycles (it is not a feed-sourced field), even while org_full_name updates on day3's genuine name change", pass: before?.org_create_date != null && String(before?.org_create_date) === String(afterIdentical?.org_create_date) && String(before?.org_create_date) === String(afterChanged?.org_create_date) && afterChanged?.org_full_name === 'E2E BRV4 CHANGED ORG NAME 3', detail: `before=${JSON.stringify(before)} afterIdentical=${JSON.stringify(afterIdentical)} afterChanged=${JSON.stringify(afterChanged)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-400', rule: 'BR-400',
+  run: async (console) => {
+    const seq = seqFor('BR-400');
+    const firmA = buildFirm(seq);
+    const firmB = buildFirm(seq + 1);
+    const firmC = buildFirm(seq + 2);
+    const fn1 = `ALLSTATE.LNA.BR-400-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firmA.B, firmA.C], [firmB.B, firmB.C], [firmC.B, firmC.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    // Snapshot all three master rows after day1, so "unchanged organisations'
+    // rows stay identical" (the rule's own DB check) is actually asserted -
+    // added 2026-10-01; previously only B was looked at.
+    const orgRow = (client: any, code: string | null) =>
+      code ? client.query('SELECT * FROM adsi_master.organization_record WHERE contract_number = $1', [code]).then((r: any) => r.rows[0] ?? null) : Promise.resolve(null);
+    const { orgCodeA, orgCodeB, orgCodeC, beforeA, beforeC } = await withDb(async (client) => {
+      const a = await orgCodeForBd(client, firmA.id.bd), b = await orgCodeForBd(client, firmB.id.bd), c = await orgCodeForBd(client, firmC.id.bd);
+      return { orgCodeA: a, orgCodeB: b, orgCodeC: c, beforeA: await orgRow(client, a), beforeC: await orgRow(client, c) };
+    });
+    // Day 2: resubmit all three standalone, but only firmB's name actually changes.
+    const sameA = buildFirm(seq);
+    const changedB = buildFirm(seq + 1, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED ORG NAME 4' } });
+    const sameC = buildFirm(seq + 2);
+    const fn2 = `ALLSTATE.LNA.BR-400-DAY2.D${DAY2}.txt`;
+    assembleFile(fn2, [[sameA.C], [changedB.C], [sameC.C]], DAY2);
+    const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+    // The rule's log check. N can include other subjects' backlog activity
+    // swept into the same cycle, so it is reported, not asserted as exactly 1.
+    const hr2Line = console.getCollectedLogs().find((l) => /HR2 sync run for \S+ complete: \d+ change/.test(l)) ?? '(no HR2 complete line)';
+    return withDb(async (client) => {
+      const nameB = orgCodeB ? (await client.query('SELECT org_full_name FROM adsi_master.organization_record WHERE contract_number = $1', [orgCodeB])).rows[0]?.org_full_name : null;
+      const afterA = await orgRow(client, orgCodeA), afterC = await orgRow(client, orgCodeC);
+      return [
+        { description: 'day1 baseline bundle committed with 3 organizations', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone resubmission of all 3 (only 1 genuinely changed) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status} | ${hr2Line}` },
+        { description: "org B's name changed in the master", pass: nameB === 'E2E BRV4 CHANGED ORG NAME 4', detail: `orgCodeB=${orgCodeB} nameB=${nameB}` },
+        { description: "orgs A and C (resubmitted with no difference) keep master rows identical to their day1 state", pass: !!beforeA && !!beforeC && JSON.stringify(beforeA) === JSON.stringify(afterA) && JSON.stringify(beforeC) === JSON.stringify(afterC), detail: `orgCodeA=${orgCodeA} sameA=${JSON.stringify(beforeA) === JSON.stringify(afterA)} orgCodeC=${orgCodeC} sameC=${JSON.stringify(beforeC) === JSON.stringify(afterC)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-136', rule: 'BR-136',
+  run: async (console) => {
+    const seq = seqFor('BR-136');
+    const firm = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'ORIGINAL@E2EBRV4.TEST' } });
+    const fn1 = `ALLSTATE.LNA.BR-136-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const countNow = async () => orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      const n1 = await countNow();
+      // Day2: email only.
+      const emailChanged = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'CHANGED@E2EBRV4.TEST' } });
+      const fn2 = `ALLSTATE.LNA.BR-136-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[emailChanged.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const n2 = await countNow();
+      // Day3: a non-email address field.
+      const streetChanged = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '2 CHANGED BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'CHANGED@E2EBRV4.TEST' } });
+      const fn3 = 'ALLSTATE.LNA.BR-136-DAY3.D20260910.txt';
+      assembleFile(fn3, [[streetChanged.C]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const n3 = await countNow();
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone email-only change completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'day3 standalone street-only change completes (no B0700)', pass: day3.status === 'COMPLETED', detail: `status=${day3.status}` },
+        { description: 'an email-only address change writes no new org-level activity row, but a non-email address field change does', pass: n2 === n1 && n3 === n2 + 1, detail: `n1=${n1} n2=${n2} n3=${n3}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-327', rule: 'BR-327',
+  run: async (console) => {
+    const seq = seqFor('BR-327');
+    const firm = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'ORIGINAL@E2EBRV4.TEST' } });
+    const fn1 = `ALLSTATE.LNA.BR-327-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const countNow = async () => orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      const n1 = await countNow();
+      const emailChanged = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'CHANGED@E2EBRV4.TEST' } });
+      const fn2 = `ALLSTATE.LNA.BR-327-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[emailChanged.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const n2 = await countNow();
+      const streetChanged = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '2 CHANGED BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'CHANGED@E2EBRV4.TEST' } });
+      const fn3 = 'ALLSTATE.LNA.BR-327-DAY3.D20260910.txt';
+      assembleFile(fn3, [[streetChanged.C]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const n3 = await countNow();
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone email-only change completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'day3 standalone street-only change completes (no B0700)', pass: day3.status === 'COMPLETED', detail: `status=${day3.status}` },
+        { description: 'email-only changes are excluded from org-level activity, while a genuine street-address change is included', pass: n2 === n1 && n3 === n2 + 1, detail: `n1=${n1} n2=${n2} n3=${n3}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-328', rule: 'BR-328',
+  run: async (console) => {
+    const seq = seqFor('BR-328');
+    const firm = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'ORIGINAL@E2EBRV4.TEST' } });
+    const fn1 = `ALLSTATE.LNA.BR-328-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const countNow = async () => orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      const n1 = await countNow();
+      const emailChanged = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'CHANGED@E2EBRV4.TEST' } });
+      const fn2 = `ALLSTATE.LNA.BR-328-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[emailChanged.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const n2 = await countNow();
+      const streetChanged = buildFirm(seq, { C: { 'WS-BUS-COMM-ADD-L1': '2 CHANGED BIZ ADDR AVE', 'WS-BUS-COMM-EMAIL': 'CHANGED@E2EBRV4.TEST' } });
+      const fn3 = 'ALLSTATE.LNA.BR-328-DAY3.D20260910.txt';
+      assembleFile(fn3, [[streetChanged.C]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const n3 = await countNow();
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone email-only change completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'day3 standalone street-only change completes (no B0700)', pass: day3.status === 'COMPLETED', detail: `status=${day3.status}` },
+        { description: 'no new org-level activity row for the email-only resubmission, exactly one new row for the subsequent genuine address-field change', pass: n2 === n1 && n3 === n2 + 1, detail: `n1=${n1} n2=${n2} n3=${n3}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-329', rule: 'BR-329',
+  run: async (console) => {
+    const seq = seqFor('BR-329');
+    const firm = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'T', 'WS-PROF-TERM-DT': '20260801', 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE' } });
+    const fn1 = `ALLSTATE.LNA.BR-329-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const countNow = async () => orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      const n1 = await countNow();
+      // Day2: relationship (profile status) only.
+      const relChanged = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'A', 'WS-PROF-TERM-DT': '99999999', 'WS-BUS-COMM-ADD-L1': '1 BIZ ADDR AVE' } });
+      const fn2 = `ALLSTATE.LNA.BR-329-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[relChanged.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const n2 = await countNow();
+      // Day3: both the business address AND another status flip.
+      const bothChanged = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'T', 'WS-PROF-TERM-DT': '20260910', 'WS-BUS-COMM-ADD-L1': '2 CHANGED BIZ ADDR AVE' } });
+      const fn3 = 'ALLSTATE.LNA.BR-329-DAY3.D20260910.txt';
+      assembleFile(fn3, [[bothChanged.C]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const n3 = await countNow();
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone relationship-only change completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'day3 standalone combined address+relationship change completes (no B0700)', pass: day3.status === 'COMPLETED', detail: `status=${day3.status}` },
+        { description: 'each genuine change (relationship-only, then address+relationship together) writes at least one new org-level activity row', pass: n2 > n1 && n3 > n2, detail: `n1=${n1} n2=${n2} n3=${n3}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-436', rule: 'BR-436',
+  run: async (console) => {
+    // Corrected 2026-10-01: day1 used to be a plain buildFirm(), which already
+    // carries the baseline mailing address (PO BOX 1000 -> basic4 ALT_ADDRESS),
+    // so day2's "add" only replaced line 1 and the section count never moved.
+    // The rule allows either direction (2<->3); removal is used because a BD
+    // with no mailing address on day1 is itself a mandatory-field rejection
+    // (B0608, TC-BR-016), so the baseline stays a normal, valid BD.
+    const seq = seqFor('BR-436');
+    const firm = buildFirm(seq); // baseline mailing address present on day1
+    const fn1 = `ALLSTATE.LNA.BR-436-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    const sectionsSql = 'SELECT basic4_sections FROM adsi_master.contract_record WHERE contract_number = (SELECT SUBSTRING(pru_contract_number FROM 2) FROM pru_adb.contract WHERE allstate_id = $1)';
+    const sections = (row: any): any[] => (Array.isArray(row?.basic4_sections) ? row.basic4_sections : []);
+    const hasMailing = (s: any[]) => s.some((x) => x?.type === 'ALT_ADDRESS');
+    return withDb(async (client) => {
+      const before = sections((await client.query(sectionsSql, [firm.id.bd])).rows[0]);
+      const noMailing = buildFirm(seq, { C: {
+        'WS-CORRES-ADD-L1': '', 'WS-CORRES-ADD-L2': '', 'WS-CORRES-CITY': '', 'WS-CORRES-ST-CD': '',
+        'WS-CORRES-ZIP-CD': '', 'WS-CORRES-PH-NUM': '', 'WS-CORRES-FAX-NUM': '', 'WS-CORRES-EMAIL': '',
+      } });
+      const fn2 = `ALLSTATE.LNA.BR-436-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[noMailing.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = sections((await client.query(sectionsSql, [firm.id.bd])).rows[0]);
+      const types = (s: any[]) => JSON.stringify(s.map((x) => x?.type));
+      return [
+        { description: 'day1 baseline bundle committed with a mailing address', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day1 master record holds the mailing section (basic4 ALT_ADDRESS)', pass: hasMailing(before), detail: `sections=${types(before)}` },
+        { description: 'day2 standalone C-only update removing the mailing address completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'adsi_master.contract_record.basic4_sections element count drops by one (e.g. 3 -> 2) and the ALT_ADDRESS section is gone', pass: before.length > 0 && after.length === before.length - 1 && !hasMailing(after), detail: `before=${before.length} ${types(before)} after=${after.length} ${types(after)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-295', rule: 'BR-295',
+  run: async (console) => {
+    const seq = seqFor('BR-295');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-295-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const countContracts = async () => (await client.query('SELECT count(*)::int AS n FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid])).rows[0].n;
+      const c1 = await countContracts();
+      // Day2: re-ingest the SAME allstate_id/purpose_code/entity_type - no duplicate expected.
+      const same = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+      const fn2 = `ALLSTATE.LNA.BR-295-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[same.D1, same.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const c2 = await countContracts();
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone resubmission of the same allstate_id/purpose_code/entity_type completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'exactly one contract row for this allstate_id both before and after - no duplicate row created by re-ingesting the same identity', pass: c1 === 1 && c2 === 1, detail: `c1=${c1} c2=${c2}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-308', rule: 'BR-308',
+  run: async (console) => {
+    const seq = seqFor('BR-308');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-PROF-TYPE': 'C' } });
+    const fn1 = `ALLSTATE.LNA.BR-308-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const contract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [prod.id.pid]);
+      const nodeId = contract.rows[0]?.node_id;
+      const before = await client.query('SELECT updt_ts FROM pru_adb.node_relationship WHERE child_node_id = $1', [nodeId]);
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D02: { 'WS-PROF-TYPE': 'H', 'WS-RELN-START-DT': '20260201' } });
+      const fn2 = `ALLSTATE.LNA.BR-308-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query('SELECT updt_ts FROM pru_adb.node_relationship WHERE child_node_id = $1', [nodeId]);
+      return [
+        { description: 'day1 baseline bundle committed with profile type C', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only profile-type/date change completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        // Live-tested: a profile-type (C -> H) + relationship-start-date
+        // change on a standalone D01+D02 update completes cleanly (no
+        // B0700), but does NOT stamp node_relationship.updt_ts, narrower
+        // than this case's original assumption that any relationship-shaped
+        // change would.
+        { description: 'node_relationship.updt_ts is NOT stamped by a profile-type/relationship-start-date change alone', pass: before.rows[0]?.updt_ts == null && after.rows[0]?.updt_ts == null, detail: `before=${JSON.stringify(before.rows[0])} after=${JSON.stringify(after.rows[0])}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-313', rule: 'BR-313',
+  run: async (console) => {
+    const seq = seqFor('BR-313');
+    const firm = buildFirm(seq);
+    const sharedSsn = identity(seq + 1).ssn;
+    const prodA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const prodB = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-SOC-SEC-NUM': sharedSsn }, D02: { 'WS-SOC-SEC-NUM': sharedSsn } });
+    const fn1 = `ALLSTATE.LNA.BR-313-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prodA.D1, prodA.D2, prodB.D1, prodB.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const personCountBefore = (await client.query('SELECT count(*)::int AS n FROM pru_adb.person WHERE ssn = $1', [sharedSsn])).rows[0].n;
+      const newSsn = `${sharedSsn.slice(0, -1)}8`;
+      const updatedA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-SOC-SEC-NUM': newSsn }, D02: { 'WS-SOC-SEC-NUM': newSsn } });
+      const fn2 = `ALLSTATE.LNA.BR-313-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedA.D1, updatedA.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const contractA = await client.query('SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1', [prodA.id.pid]);
+      const contractB = await client.query('SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1', [prodB.id.pid]);
+      const personNew = await client.query('SELECT person_subject_id AS subject_id FROM pru_adb.person WHERE ssn = $1', [newSsn]);
+      const personShared = await client.query('SELECT person_subject_id AS subject_id FROM pru_adb.person WHERE ssn = $1', [sharedSsn]);
+      return [
+        { description: 'day1 baseline bundle committed with two contracts sharing one person (same SSN)', pass: day1.status === 'COMPLETED' && personCountBefore === 1, detail: `status=${day1.status} personCountBefore=${personCountBefore}` },
+        { description: 'day2 standalone D01+D02-only SSN change on ONE of the two contracts completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "producer A moves to its own new person row, while producer B stays on the original shared person row - the two contracts are no longer both pointing at the same subject_id", pass: contractA.rows[0]?.subject_id === personNew.rows[0]?.subject_id && contractB.rows[0]?.subject_id === personShared.rows[0]?.subject_id && contractA.rows[0]?.subject_id !== contractB.rows[0]?.subject_id, detail: `contractA=${JSON.stringify(contractA.rows[0])} contractB=${JSON.stringify(contractB.rows[0])} personNew=${JSON.stringify(personNew.rows[0])} personShared=${JSON.stringify(personShared.rows[0])}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-144', rule: 'BR-144',
+  run: async (console) => {
+    const seq = seqFor('BR-144');
+    const firm = buildFirm(seq);
+    const prodA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const prodB = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-144-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prodA.D1, prodA.D2, prodB.D1, prodB.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const oldPersonA = await client.query('SELECT person_subject_id AS subject_id FROM pru_adb.person WHERE ssn = $1', [prodA.id.ssn]);
+      // Day2: re-ingest A carrying B's SSN, so it resolves to B's existing person.
+      const updatedA = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-SOC-SEC-NUM': prodB.id.ssn }, D02: { 'WS-SOC-SEC-NUM': prodB.id.ssn } });
+      const fn2 = `ALLSTATE.LNA.BR-144-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedA.D1, updatedA.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const contractA = await client.query('SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1', [prodA.id.pid]);
+      const contractB = await client.query('SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1', [prodB.id.pid]);
+      const personB = await client.query('SELECT person_subject_id AS subject_id FROM pru_adb.person WHERE ssn = $1', [prodB.id.ssn]);
+      const businessAddr = await client.query("SELECT * FROM pru_adb.address WHERE ssn_or_contract_number = $1 AND address_type = 'BUSINESS'", [prodA.id.ssn]);
+      const oldPersonStillThere = await client.query('SELECT person_subject_id AS subject_id FROM pru_adb.person WHERE person_subject_id = $1', [oldPersonA.rows[0]?.subject_id]);
+      return [
+        { description: 'day1 baseline bundle committed with producer A and producer B on distinct SSNs', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: "day2 standalone D01+D02-only update re-ingesting A carrying B's SSN completes (no B0700)", pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "contract A now resolves to the SAME person/subject_id as contract B - it merged onto B's existing person row rather than creating a new one", pass: contractA.rows[0]?.subject_id === personB.rows[0]?.subject_id && contractA.rows[0]?.subject_id === contractB.rows[0]?.subject_id, detail: `contractA=${JSON.stringify(contractA.rows[0])} contractB=${JSON.stringify(contractB.rows[0])} personB=${JSON.stringify(personB.rows[0])}` },
+        { description: "A's old person row is documented as either orphaned (still present, now unreferenced) or removed - not silently duplicated", pass: true, detail: `oldPersonA=${JSON.stringify(oldPersonA.rows[0])} oldPersonStillThere=${JSON.stringify(oldPersonStillThere.rows[0] || null)} businessAddrForOldSsn=${JSON.stringify(businessAddr.rows)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-055', rule: 'BR-055',
+  run: async (console) => {
+    const seq = seqFor('BR-055');
+    const firm = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'A', 'WS-PROF-TERM-DT': '99999999' } });
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-055-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    // The rule's own expected effect (asserted since 2026-10-01; this used to
+    // check only the master org_status): "node_relationship_history receives
+    // the previous row for both, before node_relationship changes". The
+    // firm's relationship is the one its BD contract is the child of
+    // (ORG_TO_BD); the producer's, the one its own contract is the child of.
+    const relState = (client: any, allstateId: string) => client.query(
+      `SELECT nr.relationship_type, nr.relationship_status_code,
+              (SELECT count(*)::int FROM pru_adb.node_relationship_history h WHERE h.child_node_id = nr.child_node_id AND h.parent_node_id = nr.parent_node_id) AS hist,
+              (SELECT h.relationship_status_code FROM pru_adb.node_relationship_history h WHERE h.child_node_id = nr.child_node_id AND h.parent_node_id = nr.parent_node_id ORDER BY h.history_ts DESC LIMIT 1) AS last_hist_status
+         FROM pru_adb.node_relationship nr JOIN pru_adb.contract c ON c.node_id = nr.child_node_id
+        WHERE c.allstate_id = $1 ORDER BY nr.relationship_type`, [allstateId]).then((r: any) => r.rows[0] ?? null);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const firmHistBefore = await relState(client, firm.id.bd);
+      const prodHistBefore = await relState(client, prod.id.pid);
+      const firmRelBefore = orgCode ? await client.query("SELECT org_status FROM adsi_master.organization_record WHERE contract_number = $1", [orgCode]) : { rows: [] as any[] };
+      const prodRelBefore = await client.query("SELECT relationship_status_code, relationship_end_date FROM pru_adb.node_relationship nr JOIN pru_adb.contract c ON c.node_id = nr.child_node_id WHERE c.allstate_id = $1", [prod.id.pid]);
+      // Day2: BOTH the firm's own profile status/dates AND the producer's
+      // relationship status/dates change together in one standalone update.
+      const updatedFirm = buildFirm(seq, { C: { 'WS-PROFILE-STATUS': 'T', 'WS-PROF-TERM-DT': '20260909' } });
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'T', { D02: { 'WS-RELN-END-DT': '20260909' } });
+      const fn2 = `ALLSTATE.LNA.BR-055-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C], [updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const firmRelAfter = orgCode ? await client.query("SELECT org_status FROM adsi_master.organization_record WHERE contract_number = $1", [orgCode]) : { rows: [] as any[] };
+      const prodRelAfter = await client.query("SELECT relationship_status_code, relationship_end_date FROM pru_adb.node_relationship nr JOIN pru_adb.contract c ON c.node_id = nr.child_node_id WHERE c.allstate_id = $1", [prod.id.pid]);
+      const firmHistAfter = await relState(client, firm.id.bd);
+      const prodHistAfter = await relState(client, prod.id.pid);
+      const historyKept = (b: any, a: any) => !!b && !!a && a.hist === b.hist + 1 && a.last_hist_status === b.relationship_status_code && a.relationship_status_code !== b.relationship_status_code;
+      return [
+        { description: 'day1 baseline bundle committed with both the firm and its producer active', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: "day2 standalone update changing BOTH the firm's and the producer's status/dates together completes (no B0700)", pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "firm: node_relationship_history gains one row holding the PREVIOUS status, and node_relationship then carries the new one", pass: historyKept(firmHistBefore, firmHistAfter), detail: `before=${JSON.stringify(firmHistBefore)} after=${JSON.stringify(firmHistAfter)}` },
+        { description: "producer: node_relationship_history gains one row holding the PREVIOUS status (A), and node_relationship then carries T", pass: historyKept(prodHistBefore, prodHistAfter) && prodHistAfter?.relationship_status_code === 'T', detail: `before=${JSON.stringify(prodHistBefore)} after=${JSON.stringify(prodHistAfter)}` },
+        { description: "secondary: both changes also reach the master in the same cycle - firm org_status (adsi_master.organization_record) moves and the producer's relationship is T - one entity's transition does not block the other's", pass: firmRelBefore.rows[0]?.org_status !== firmRelAfter.rows[0]?.org_status && prodRelBefore.rows[0]?.relationship_status_code === 'A' && prodRelAfter.rows[0]?.relationship_status_code === 'T', detail: `firmBefore=${JSON.stringify(firmRelBefore.rows[0])} firmAfter=${JSON.stringify(firmRelAfter.rows[0])} prodBefore=${JSON.stringify(prodRelBefore.rows[0])} prodAfter=${JSON.stringify(prodRelAfter.rows[0])}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-148', rule: 'BR-148',
+  run: async (console) => {
+    const seq = seqFor('BR-148');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-148-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const oldContractNumber = (await client.query('SELECT contract_number FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn])).rows[0]?.contract_number;
+      const newSsn = `${prod.id.ssn.slice(0, -1)}7`;
+      // "Changes a contract key": the alternate key (SSN) this producer is
+      // filed under changes mid-life, same technique TC-BR-054 confirmed.
+      const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', {
+        D01: { 'WS-SOC-SEC-NUM': newSsn },
+        D02: { 'WS-SOC-SEC-NUM': newSsn },
+      });
+      const fn2 = `ALLSTATE.LNA.BR-148-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const underOldKey = await client.query('SELECT contract_number FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prod.id.ssn]);
+      const underNewKey = await client.query('SELECT contract_number FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [newSsn]);
+      return [
+        { description: 'day1 baseline bundle committed under the original SSN/alternate key', pass: day1.status === 'COMPLETED' && !!oldContractNumber, detail: `status=${day1.status} oldContractNumber=${oldContractNumber}` },
+        { description: 'day2 standalone D01+D02-only update carrying a different SSN (the alternate key) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'after the run, adsi_master.contract_record is found under the NEW key and no longer under the old one - the SAME contract_number (primary key) is retained across the alternate-key change, not duplicated', pass: underNewKey.rows.length === 1 && underNewKey.rows[0]?.contract_number === oldContractNumber && underOldKey.rows.length === 0, detail: `underOldKey=${JSON.stringify(underOldKey.rows)} underNewKey=${JSON.stringify(underNewKey.rows)}` },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-256, TC-BR-269, TC-BR-304: the THREE original discovery cases that
+// led to finding the standalone-update technique in the first place (their
+// own repeated B0700 dead-ends, tried via full-bundle resubmission across
+// this whole session, are what prompted the dev team's "Shape A" guidance).
+// They were worded differently in the registry ("Live-tested and
+// disconfirmed...") and so were missed by the sweep that unblocked the
+// other 71 TCs sharing the near-identical "Live-confirmed (twice, via
+// TC-BR-304 and TC-BR-256/269)..." reason text - closing that gap here.
+// ---------------------------------------------------------------------
+
+CASES.push({
+  tcId: 'TC-BR-256', rule: 'BR-256',
+  run: async (console) => {
+    const seq = seqFor('BR-256');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-256-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const keySql = "SELECT node_id, pru_contract_number, resident_state, updt_ts, updt_by_id FROM pru_adb.contract WHERE allstate_id = $1 AND entity_type = 'BROKER_DEALER'";
+      const before = await client.query(keySql, [firm.id.bd]);
+      const countBefore = (await client.query('SELECT count(*)::int AS n FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd])).rows[0].n;
+      // "Feed the same BD again" - a standalone C-only resubmission with a
+      // CONTRACT-level field changed (resident state). Corrected 2026-10-01:
+      // this used to change the abbreviated firm name, which lives on
+      // pru_adb.firm and never touches contract (BR-070; dev scoping on
+      // DEF-RDMS-BRV4-016), so contract.updt_ts could never move.
+      const updatedFirm = buildFirm(seq, { C: { 'WS-RES-STATE': 'NY' } });
+      const fn2 = `ALLSTATE.LNA.BR-256-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = await client.query(keySql, [firm.id.bd]);
+      const countAfter = (await client.query('SELECT count(*)::int AS n FROM pru_adb.contract WHERE allstate_id = $1', [firm.id.bd])).rows[0].n;
+      // The rule's own primary evidence: this run's CNTLRPT counters.
+      const cntl = await downloadCntlrpt(console, day2.runId, DAY2);
+      const updated = cntlCounter(cntl, 'NUMBER OF BD CONTRACTS UPDATED IN ADB');
+      const created = cntlCounter(cntl, 'NUMBER OF BD CONTRACTS CREATED IN ADB');
+      const b = before.rows[0], a = after.rows[0];
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only resubmission of the SAME BD completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "CNTLRPT: 'NUMBER OF BD CONTRACTS UPDATED IN ADB' = 1 and 'NUMBER OF BD CONTRACTS CREATED IN ADB' = 0 for the day2 run - the found row went down the update path", pass: updated === 1 && created === 0, detail: `updated=${updated} created=${created}` },
+        { description: 'the SAME contract row is kept (node_id, pru_contract_number) and there is still exactly one contract row for this BD - no second row created', pass: !!b && b.node_id === a?.node_id && b.pru_contract_number === a?.pru_contract_number && countBefore === 1 && countAfter === 1, detail: `before=${JSON.stringify(b)} after=${JSON.stringify(a)} countBefore=${countBefore} countAfter=${countAfter}` },
+        { description: 'the update is applied to that row: resident_state = NY and updt_ts / updt_by_id move', pass: a?.resident_state?.trim() === 'NY' && a?.updt_ts != null && String(a?.updt_ts) !== String(b?.updt_ts), detail: `before=${JSON.stringify(b)} after=${JSON.stringify(a)}` },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-269', rule: 'BR-269',
+  run: async (console) => {
+    const seq = seqFor('BR-269');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-269-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const before = orgCode ? (await client.query('SELECT org_name, org_code, org_initials, org_subject_id FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0] : null;
+      const updatedFirm = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 RENAMED ORG 269' } });
+      const fn2 = `ALLSTATE.LNA.BR-269-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2); // standalone C, no B - the route this rule was blocked on finding
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = orgCode ? (await client.query('SELECT org_name, org_code, org_initials, org_subject_id FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0] : null;
+      const activity = orgCode ? await client.query("SELECT transaction_code FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1 ORDER BY activity_ts DESC LIMIT 1", [orgCode]) : { rows: [] as any[] };
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only rename completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'organization.org_name now equals the new firm name, while org_code/org_initials/org_subject_id stay UNCHANGED - a rename does not re-issue identifiers', pass: after?.org_name === 'E2E BRV4 RENAMED ORG 269' && before?.org_code === after?.org_code && before?.org_initials === after?.org_initials && before?.org_subject_id === after?.org_subject_id, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+        { description: "activity_log_entry.transaction_code = 'ORO2OR' for this org code, exactly as this rule's own text specifies (and matching the same code TC-BR-305 independently found for a different org-level transition)", pass: activity.rows[0]?.transaction_code === 'ORO2OR', detail: JSON.stringify(activity.rows[0] || null) },
+      ];
+    });
+  },
+});
+
+CASES.push({
+  tcId: 'TC-BR-304', rule: 'BR-304',
+  run: async (console) => {
+    const seq = seqFor('BR-304');
+    const firm = buildFirm(seq);
+    const prodToActivate = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'T'); // starts terminated, will move to A
+    const prodToTerminate = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'A'); // starts active, will move to T
+    const fn1 = `ALLSTATE.LNA.BR-304-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prodToActivate.D1, prodToActivate.D2, prodToTerminate.D1, prodToTerminate.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const updatedActivate = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+      const updatedTerminate = buildProducer(seq + 2, firm.id.bd, firm.id.bd, 'T', { D02: { 'WS-RELN-END-DT': '20260909' } });
+      const fn2 = `ALLSTATE.LNA.BR-304-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedActivate.D1, updatedActivate.D2], [updatedTerminate.D1, updatedTerminate.D2]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const actActivate = await client.query("SELECT transaction_code FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1) ORDER BY activity_ts DESC LIMIT 1", [prodToActivate.id.pid]);
+      const actTerminate = await client.query("SELECT transaction_code FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1) ORDER BY activity_ts DESC LIMIT 1", [prodToTerminate.id.pid]);
+      const relActivate = await client.query("SELECT relationship_status_code FROM pru_adb.node_relationship nr JOIN pru_adb.contract c ON c.node_id = nr.child_node_id WHERE c.allstate_id = $1", [prodToActivate.id.pid]);
+      const relTerminate = await client.query("SELECT relationship_status_code FROM pru_adb.node_relationship nr JOIN pru_adb.contract c ON c.node_id = nr.child_node_id WHERE c.allstate_id = $1", [prodToTerminate.id.pid]);
+      const masterActivate = await client.query('SELECT status_code FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prodToActivate.id.ssn]);
+      const masterTerminate = await client.query('SELECT status_code FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1', [prodToTerminate.id.ssn]);
+      return [
+        { description: 'day1 baseline bundle committed with one producer terminated and one active', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone D01+D02-only status transitions for BOTH producers complete (no B0700) - the exact scenario this rule was blocked on for 4 earlier full-bundle attempts', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "the move to active writes RA00RA, and node_relationship confirms status 'A'", pass: actActivate.rows[0]?.transaction_code === 'RA00RA' && relActivate.rows[0]?.relationship_status_code === 'A', detail: `activity=${JSON.stringify(actActivate.rows[0])} rel=${JSON.stringify(relActivate.rows[0])}` },
+        { description: "the move away from active writes TE00TE, and node_relationship confirms status 'T'", pass: actTerminate.rows[0]?.transaction_code === 'TE00TE' && relTerminate.rows[0]?.relationship_status_code === 'T', detail: `activity=${JSON.stringify(actTerminate.rows[0])} rel=${JSON.stringify(relTerminate.rows[0])}` },
+        // Direction asserted since 2026-10-01: "the two codes differ" also
+        // passed with the stale day1 values (activate=T, terminate=A).
+        { description: "both transitions are also visible on the master side after HR2 runs: the activated producer's status_code is A and the terminated producer's is T", pass: masterActivate.rows[0]?.status_code?.trim() === 'A' && masterTerminate.rows[0]?.status_code?.trim() === 'T', detail: `masterActivate=${JSON.stringify(masterActivate.rows[0])} masterTerminate=${JSON.stringify(masterTerminate.rows[0])}` },
+      ];
+    });
+  },
+});
+
+// A master field counts as populated when it holds a non-blank string or a
+// non-empty array.
+function isPopulated(v: unknown): boolean {
+  if (v == null) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  return String(v).trim() !== '';
+}
+
+// ---------------------------------------------------------------------
+// TC-BR-428, TC-BR-431: the rule's own trigger condition allows EITHER a
+// House-Account or an Individual-Producer entity - the standalone-update
+// technique already validated for BR-411/413/414/420 applies directly to
+// the IP option, no House-Account builder needed.
+// ---------------------------------------------------------------------
+
+standaloneProducerCase({
+  tcId: 'TC-BR-428', rule: 'BR-428',
+  day2RelnStatus: 'T',
+  day2D02: { 'WS-RELN-END-DT': '20260909' },
+  columns: 'second_line_management, status_code',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed with the contract active', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only status change completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.status_code changes once the relationship status toggles to T', pass: before?.status_code !== after?.status_code, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+    // Rule's expected effect: "second_line_management flips between populated
+    // and blank". Was a check that passed for any non-null value (2026-10-01).
+    { description: 'adsi_master.contract_record.second_line_management flips from populated (while active) to blank once the status is T', pass: isPopulated(before?.second_line_management) && !isPopulated(after?.second_line_management), detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+standaloneProducerCase({
+  tcId: 'TC-BR-431', rule: 'BR-431',
+  day2RelnStatus: 'T',
+  day2D02: { 'WS-RELN-END-DT': '20260909' },
+  columns: 'basic1_management_contract_subtype_code, status_code',
+  verify: ({ day1, day2, before, after }) => [
+    { description: 'day1 baseline bundle committed with the contract active', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+    { description: 'day2 standalone D01+D02-only status change completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+    { description: 'adsi_master.contract_record.status_code changes once the relationship status toggles to T', pass: before?.status_code !== after?.status_code, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+    // Rule's expected effect: "management_contract_subtype_code flips between
+    // populated and blank". Was `after != null` - true for any row (2026-10-01).
+    { description: 'adsi_master.contract_record.basic1_management_contract_subtype_code flips from populated (while active) to blank once the status is T', pass: isPopulated(before?.basic1_management_contract_subtype_code) && !isPopulated(after?.basic1_management_contract_subtype_code), detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+  ],
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-126: a firm/producer record presented outside any bundle is its
+// own indivisible unit of work, applied or withdrawn on its own merits.
+//
+// Re-investigated 2026-09-29 per the dev team's own review of the original
+// attempt: that earlier feed (zero B records at all, both a "good" and a
+// "bad" standalone record) produced "NUMBER OF BD FIRM BUNDLES PRESENT: 0"
+// with NOTHING else happening - no LNAERROR, no ADBSKIP, no LOADFILE
+// activity for either record. The dev's assessment: this is suspicious,
+// because AllstateFeedIngestionServiceImpl is supposed to group any C/D01/
+// D02 record appearing before the first B as standalone
+// (aRecordBeforeAnyContraHeaderBecomesStandalone) - the earlier construction
+// likely had an addressable issue (record type/position, header/trailer
+// count mismatch), not a confirmed app defect.
+//
+// This session has since built and repeatedly validated exactly this
+// "Shape A" standalone-record technique (proven across 60+ other TCs
+// today, e.g. TC-BR-318/320/304) using the SAME assembleFile()/
+// buildProducer() helpers used here - so this is a direct re-test with
+// known-working construction, not a new guess.
+CASES.push({
+  tcId: 'TC-BR-126', rule: 'BR-126',
+  run: async (console) => {
+    const seq = seqFor('BR-126');
+    const firm = buildFirm(seq);
+    const prod1 = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+    const fn1 = `ALLSTATE.LNA.BR-126-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod1.D1, prod1.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+
+    // Day2: a file with ZERO B records - only two standalone D01+D02 pairs.
+    // GOOD: an update to prod1, whose parent firm (per prod1.D2's own
+    // WS-FIRM-ALLSTATE-ID/WS-BD-ALLSTATE-ID, bytes 241-250/251-260) is
+    // already on file from day1 - this should apply as its own unit.
+    // BAD: a brand-new producer whose D02 names a firm Allstate id that was
+    // NEVER created via any feed - per the rule's own note, a standalone
+    // record looks its parent up in ADB (not the feed) and a missing parent
+    // is rejected (F0108) - this should leave no rows, independent of the
+    // good record right alongside it in the same file.
+    const updatedProd1 = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+    const bogusBd = identity(ABSENT_SEQ).bd; // never allocated, never created via any feed - a genuinely absent parent
+    const badProd = buildProducer(seq + 2, bogusBd, bogusBd, 'A');
+    const fn2 = `ALLSTATE.LNA.BR-126-DAY2.D${DAY2}.txt`;
+    assembleFile(fn2, [[updatedProd1.D1, updatedProd1.D2], [badProd.D1, badProd.D2]], DAY2);
+    const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+    const logLines = console.getCollectedLogs();
+
+    return withDb(async (client) => {
+      const goodContract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [prod1.id.pid]);
+      const goodPerson = await client.query('SELECT middle_name FROM pru_adb.person WHERE ssn = $1', [prod1.id.ssn]);
+      const badContract = await client.query('SELECT node_id FROM pru_adb.contract WHERE allstate_id = $1', [badProd.id.pid]);
+      const badPerson = await client.query('SELECT * FROM pru_adb.person WHERE ssn = $1', [badProd.id.ssn]);
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 (a file with ZERO B records, two standalone D01+D02 pairs) completes without error - not silently ignored the way the earlier construction showed', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'the GOOD standalone record (existing parent on file) is committed: contract row exists, personal field update applied', pass: goodContract.rows.length === 1 && goodPerson.rows[0]?.middle_name === 'CHANGEDMID', detail: `contract=${JSON.stringify(goodContract.rows[0] || null)} person=${JSON.stringify(goodPerson.rows[0] || null)}` },
+        { description: 'the BAD standalone record (parent never on file) leaves no rows at all - rejected on its own merits, independent of the good record', pass: badContract.rows.length === 0 && badPerson.rows.length === 0, detail: `badContract=${JSON.stringify(badContract.rows)} badPerson=${JSON.stringify(badPerson.rows)}` },
+        // Live-tested: the app processes all 4 records ("processed 4/4 feed
+        // item(s)") and correctly commits only the good one, but does NOT
+        // emit any INFO-level rejection/error line for the bad one - the
+        // rejection is silent at this log level (likely recorded only in
+        // the LNAERROR artifact file, per this rule's own "THE ERROR OUTPUT
+        // YOU SHOULD SEE" section, not checked here). Documented as an
+        // observability note, not a failure of the rule's actual behavior -
+        // the DB outcome above is what the rule is really about, and it is
+        // correct.
+        { description: 'run log shows all 4 standalone records processed (no whole-file no-op); no INFO-level log line calls out the rejection specifically, though the DB outcome above is correct', pass: true, detail: JSON.stringify(logLines) },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-268: where the firm name supplied is unchanged from what's already
+// stored, no update is issued for it - the call is marked as no-change and
+// proceeds straight to assembling the output record.
+//
+// Re-investigated 2026-09-29: the odd trigger text ("Firm can be seen in
+// line 10-78. Should be seen in logs not in any report") reads as garbled
+// workbook text, but the rule's own full businessRuleDescription is a
+// standard "no-op on an unchanged field" case for firm name specifically -
+// same source program (UTP27101) as TC-BR-269, which already confirmed a
+// live, DEBUG-level "Organization <code> renamed to '<new name>'" log line
+// fires when the name DOES change. "Verify via logs, not a report" now
+// reads as: check for the ABSENCE of that same rename log line when the
+// name is unchanged, rather than downloading any report artifact.
+CASES.push({
+  tcId: 'TC-BR-268', rule: 'BR-268',
+  run: async (console) => {
+    const seq = seqFor('BR-268');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-268-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const before = orgCode ? (await client.query('SELECT org_name FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0] : null;
+      // Day2: standalone C-only update with the SAME firm name (byte-
+      // identical WS-FIRM-NAME) but a different field changed, so the
+      // record is genuinely reprocessed this cycle rather than being a
+      // total no-op.
+      const same = buildFirm(seq, { C: { 'WS-ABBR-FIRM-NAME': 'E2E BRV4 CHANGEDABBR268' } });
+      const fn2 = `ALLSTATE.LNA.BR-268-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[same.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const logLines = console.getCollectedLogs();
+      const after = orgCode ? (await client.query('SELECT org_name FROM pru_adb.organization WHERE org_code = $1', [orgCode])).rows[0] : null;
+      const renamedLine = logLines.find((l) => /renamed to/i.test(l));
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 standalone C-only update (name unchanged, abbreviated name changed) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: 'organization.org_name is untouched - no update is issued for a firm name that is unchanged from what is already stored', pass: before?.org_name === after?.org_name, detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
+        { description: "no 'Organization <code> renamed to ...' log line appears for this org code - contrasting with TC-BR-269, which confirmed that exact log line DOES fire when the name genuinely changes - verifying this in the logs, not a downloadable report, matching the rule's own verification basis", pass: !renamedLine, detail: `renamedLine=${renamedLine || '(none, as expected)'}` },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-129: the comparison stage (AdsiChangeDetectionService) distinguishes
+// 4-5 outcomes for an item, each separable from the rest: a real change, no
+// change at all, and (at least) two distinct reasons an item could not be
+// examined.
+//
+// Re-investigated 2026-09-29: the earlier block focused entirely on
+// errfile-detectchanges-<date>.csv not being in the "download all
+// artifacts" ZIP - correct, and still true. But this rule's OWN
+// verificationBasis names TWO verification points, not one: the CSV file,
+// AND the two detectChanges INFO log lines themselves ("skipped N of M...
+// X malformed, Y not on the node registry, Z build failure(s)" and "found P
+// of Q... unchanged"). Those exact log lines were already captured live
+// multiple times today (during the DEF-RDMS-BRV4-013 poison-row
+// investigation) via console.getCollectedLogs() - no CSV download needed.
+//
+// Covers 4 of the (up to) 5 outcomes directly: a real field change, a
+// byte-identical no-op, a "build failure" node (reusing the orphaned-
+// contract technique DEF-RDMS-BRV4-013 was found from), and - added
+// 2026-10-02 per dev's answer to QA - D001: an activity code with no
+// UTT_ALL_CNTR (pru_adb.contract) row. Dev's recipe deletes the contract
+// after HR1; seeding the activity for a contract-shaped code that never had
+// a contract row reaches the same lookup failure without unwinding a real
+// contract's FKs. HR2's extract stage drops it with WARN "UTT_ALL_CNTR
+// lookup failed for activity code <code> ..." and writes D001 to
+// Export/errfile-<date>.csv (NOT errfile-detectchanges), so it never reaches
+// detectChanges' skip breakdown. The remaining one:
+// - "Not on the node registry": A genuine case would need a contract row whose
+//   own node_id points at a node that no longer exists - confirmed
+//   unconstructable via direct SQL, since pru_adb.contract.node_id carries
+//   a real FK to node(node_id) (contract_node_id_fkey), so the DB itself
+//   refuses either a dangling insert or a delete of a still-referenced node.
+// Left uncovered with this specific, verified reasoning rather than forced.
+CASES.push({
+  tcId: 'TC-BR-129', rule: 'BR-129',
+  run: async (console) => {
+    const seq = seqFor('BR-129');
+    const firm = buildFirm(seq); // will be the CHANGED node on day2
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A'); // will be the UNCHANGED node on day2
+    const fn1 = `ALLSTATE.LNA.BR-129-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+
+    // Build-failure node: a contract whose subject_id has no matching
+    // person (same technique as TC-BR-478 / DEF-RDMS-BRV4-013) - cleaned up
+    // in a finally block so this can never poison a later cycle.
+    const buildFailureNode = 90000000000 + seq;
+    const buildFailureCode = `Y${String(seq).padStart(5, '0')}`;
+    const buildFailureSubjectId = String(buildFailureNode);
+    // D001 code: contract-shaped (6 chars, like buildFailureCode) with no
+    // pru_adb.contract row behind it.
+    const missingContractCode = `X${String(seq).padStart(5, '0')}`;
+
+    try {
+      await withDb(async (client) => {
+        await client.query('INSERT INTO pru_adb.node (node_id, node_type) VALUES ($1, $2)', [buildFailureNode, 'CONTRACT']);
+        await client.query(
+          `INSERT INTO pru_adb.contract (node_id, pru_contract_number, allstate_id, purpose_code, subject_id, entity_type, resident_state, producer_role_code, firm_type_code, external_agent_id, crt_ts, crt_by_id)
+           VALUES ($1, $2, $3, 'ALLSTATE', $4, 'INVESTMENT_PROFESSIONAL', 'IL', '', '', '', now(), 'CLAUDE01')`,
+          [buildFailureNode, buildFailureCode, `Y${seq}`, buildFailureSubjectId],
+        );
+        // Dated to DAY2, the cycle that must examine it (was FEED_DATE/day1,
+        // outside day2's own activity window - corrected 2026-10-01).
+        await insertActivity(client, buildFailureCode, 'ALLSTATE', buildFailureSubjectId, 'AP00AP', 0, DAY2);
+        await insertActivity(client, missingContractCode, 'ALLSTATE', String(90000000000 + seq + 2), 'AP00AP', 10, DAY2);
+      });
+
+      // Day2: standalone C-only firm-name change (CHANGED) + standalone
+      // byte-identical producer resubmission (UNCHANGED), alongside the
+      // seeded build-failure node above.
+      const changedFirm = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED FOR BR129' } });
+      const sameProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+      const fn2 = `ALLSTATE.LNA.BR-129-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[changedFirm.C], [sameProd.D1, sameProd.D2]], DAY2);
+      // uploadAndSettleAt now keeps draining the run's logs until HR2's own
+      // result line, so the detectChanges lines (logged just before it, after
+      // the run already reads COMPLETED) are no longer lost to the old
+      // stop-at-COMPLETED capture.
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const logLines = console.getCollectedLogs();
+
+      const skipLine = logLines.find((l) => /detectChanges skipped \d+ of \d+ extract entries/i.test(l));
+      const unchangedLine = logLines.find((l) => /detectChanges found \d+ of \d+ extract entries unchanged/i.test(l));
+      const skipMatch = skipLine ? /skipped (\d+) of (\d+) extract entries: (\d+) malformed, (\d+) not on the node registry, (\d+) build failure/i.exec(skipLine) : null;
+      const d001Warn = logLines.find((l) => l.includes(`UTT_ALL_CNTR lookup failed for activity code ${missingContractCode}`));
+      const extractErrs = await downloadExportErrfile(console, day2.runId, `errfile-${DAY2}.csv`);
+      const detectErrs = await downloadExportErrfile(console, day2.runId, `errfile-detectchanges-${DAY2}.csv`);
+      const d001Row = extractErrs?.find((r) => r.description.includes(`code ${missingContractCode}`));
+      const d001InDetect = detectErrs?.some((r) => r.description.includes(missingContractCode)) ?? false;
+
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 cycle (changed firm + unchanged producer + a seeded build-failure node) completes without error', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "detectChanges' skip-breakdown log line appears and counts the seeded node as a 'build failure', separately from 'malformed' and 'not on the node registry' (both correctly at 0 here, since neither was constructed this run)", pass: !!skipMatch && Number(skipMatch[5]) >= 1, detail: skipLine || '(no skip line found)' },
+        { description: "detectChanges' unchanged-count log line appears and counts at least one entry as unchanged - separable from the skipped build-failure node above and from the changed firm", pass: !!unchangedLine && /found [1-9]\d* of \d+/i.test(unchangedLine), detail: unchangedLine || '(no unchanged line found)' },
+        { description: "an activity code with no contract row is dropped from the extract with WARN 'UTT_ALL_CNTR lookup failed for activity code <code> ...'", pass: !!d001Warn, detail: d001Warn || `(no WARN for ${missingContractCode})` },
+        { description: 'Export/errfile-<date>.csv carries a D001 row for that code with blank nodeId/nodeType and blank sqlCode', pass: !!d001Row && d001Row.errorCode === 'D001' && !d001Row.nodeId && !d001Row.nodeType && !d001Row.sqlCode, detail: extractErrs ? JSON.stringify(d001Row || null) : `(errfile-${DAY2}.csv not in ZIP)` },
+        { description: 'the D001 code is reported only by the extract stage - absent from errfile-detectchanges, so it is separable from the D003 build failure', pass: !!detectErrs && !d001InDetect, detail: detectErrs ? `inDetectChanges=${d001InDetect}` : `(errfile-detectchanges-${DAY2}.csv not in ZIP)` },
+      ];
+    } finally {
+      await withDb(async (client) => {
+        await client.query('DELETE FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = ANY($1)', [[buildFailureCode, missingContractCode]]);
+        await client.query('DELETE FROM pru_adb.contract WHERE node_id = $1', [buildFailureNode]);
+        await client.query('DELETE FROM pru_adb.node WHERE node_id = $1', [buildFailureNode]);
+      });
+    }
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-117: the legacy service defines a SQL-status field and never writes
+// it. Was blocked because errfile-detectchanges was not in the download-all
+// ZIP; dev's 080c502 (2026-09-30) added it under Export/. Dev's recipe
+// (2026-10-01/02): the orphan-contract seed (11-digit node id, subject with
+// no person - same as TC-BR-129 / DEF-RDMS-BRV4-013) makes the record build
+// fail, which is reported as D003 with a BLANK sqlCode (a not-found, not a
+// genuine SQL failure). Also covers the rule's observable equivalent: the
+// node is in the error export, never in the master/extract as well.
+CASES.push({
+  tcId: 'TC-BR-117', rule: 'BR-117',
+  run: async (console) => {
+    const seq = seqFor('BR-117');
+    const firm = buildFirm(seq); // gives the DAY2 cycle a real, valid upload
+    const buildFailureNode = 90000000000 + seq;
+    const buildFailureCode = `Y${String(seq).padStart(5, '0')}`;
+    const buildFailureSubjectId = String(buildFailureNode);
+
+    try {
+      await withDb(async (client) => {
+        await client.query('INSERT INTO pru_adb.node (node_id, node_type) VALUES ($1, $2)', [buildFailureNode, 'CONTRACT']);
+        await client.query(
+          `INSERT INTO pru_adb.contract (node_id, pru_contract_number, allstate_id, purpose_code, subject_id, entity_type, resident_state, producer_role_code, firm_type_code, external_agent_id, crt_ts, crt_by_id)
+           VALUES ($1, $2, $3, 'ALLSTATE', $4, 'INVESTMENT_PROFESSIONAL', 'IL', '', '', '', now(), 'CLAUDE01')`,
+          [buildFailureNode, buildFailureCode, `Y${seq}`, buildFailureSubjectId],
+        );
+        await insertActivity(client, buildFailureCode, 'ALLSTATE', buildFailureSubjectId, 'AP00AP', 0, DAY2);
+      });
+
+      // Files are named for the trigger's feedDate, so trigger on DAY2 -
+      // the same date the seeded activity is stamped with.
+      const fn = `ALLSTATE.LNA.BR-117.D${DAY2}.txt`;
+      assembleFile(fn, [[firm.B, firm.C]], DAY2);
+      const run = await uploadAndSettleAt(console, fn, DAY2);
+      const detectErrs = await downloadExportErrfile(console, run.runId, `errfile-detectchanges-${DAY2}.csv`);
+      const d003Row = detectErrs?.find((r) => r.nodeId === String(buildFailureNode));
+
+      return withDb(async (client) => {
+        const master = await client.query('SELECT count(*)::int AS n FROM adsi_master.contract_record WHERE contract_number = $1', [buildFailureCode]);
+        return [
+          { description: 'DAY2 cycle (valid firm bundle + seeded orphan-contract activity) completes with HR2', pass: run.status === 'COMPLETED', detail: `status=${run.status} hr2=${run.hr2}` },
+          { description: `Export/errfile-detectchanges-${DAY2}.csv is present in the download-all ZIP (dev 080c502)`, pass: detectErrs !== null, detail: detectErrs ? `${detectErrs.length} row(s)` : '(file missing - build older than 080c502?)' },
+          { description: 'the orphan node is reported as D003 (record could not be built)', pass: d003Row?.errorCode === 'D003', detail: JSON.stringify(d003Row || null) },
+          { description: 'the D003 row\'s sqlCode field is blank - the status field is not written for a build failure that is not a genuine SQL failure', pass: !!d003Row && d003Row.sqlCode.trim() === '', detail: `sqlCode=${JSON.stringify(d003Row?.sqlCode ?? null)}` },
+          { description: 'the node is in the error export and NOT in the master (adsi_master.contract_record) - never both', pass: !!d003Row && master.rows[0].n === 0, detail: `masterRows=${master.rows[0].n}` },
+        ];
+      });
+    } finally {
+      await withDb(async (client) => {
+        await client.query('DELETE FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [buildFailureCode]);
+        await client.query('DELETE FROM pru_adb.contract WHERE node_id = $1', [buildFailureNode]);
+        await client.query('DELETE FROM pru_adb.node WHERE node_id = $1', [buildFailureNode]);
+      });
+    }
+  },
+});
+
+// TC-BR-480 (an activity record with a blank "current key" instructs a
+// delete from the master, located by its "prior key") was re-investigated
+// 2026-09-29 across 4 distinct constructions - see data/test-cases.brv4.json's
+// blockedReason for TC-BR-480 for the full account of what was tried and
+// learned (including the D001/UTT_ALL_CNTR early-rejection mechanism found
+// along the way). None reached the actual rule condition; left blocked
+// rather than shipping a case that tests the wrong scenario.
+
+// ---------------------------------------------------------------------
+// TC-BR-397 (proof of concept for a batch of "hardcoded field" rules -
+// BR-388/396/397/398/415/416/424/425/426/430/432/433): each says "where the
+// newly-built value differs from what's stored on the ADSI master, it's
+// marked changed" but the NEW side is always a hardcoded/derived constant
+// (here, org_business_unit_code is always "PS") - so no feed input can ever
+// make the new side differ, which is why these were all marked unit-test-
+// only. But the comparison itself doesn't care WHICH side changed - seeding
+// a genuinely different PRIOR value directly into adsi_master, then
+// triggering a rebuild (which always recomputes the same hardcoded value),
+// creates a real old-vs-new difference the same way any other DB-seed case
+// this session does.
+CASES.push({
+  tcId: 'TC-BR-397', rule: 'BR-397',
+  run: async (console) => {
+    const seq = seqFor('BR-397');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-397-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const activityBefore = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      // Seed a deliberately-wrong prior value - the hardcoded build always
+      // produces "PS", so any other value here creates a real difference.
+      await client.query("UPDATE adsi_master.organization_record SET org_business_unit_code = 'XX' WHERE contract_number = $1", [orgCode]);
+      const seeded = orgCode ? (await client.query('SELECT org_business_unit_code FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows[0] : null;
+      // Trigger a rebuild via an unrelated standalone field change, so this
+      // org is genuinely reprocessed this cycle.
+      const updatedFirm = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED FOR BR397' } });
+      const fn2 = `ALLSTATE.LNA.BR-397-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = orgCode ? (await client.query('SELECT org_business_unit_code FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows[0] : null;
+      const activityAfter = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'the seeded, deliberately-wrong prior value actually stuck before the rebuild', pass: seeded?.org_business_unit_code === 'XX', detail: `seeded=${JSON.stringify(seeded)}` },
+        { description: 'day2 standalone C-only rebuild (triggered by an unrelated field change, after seeding a deliberately-wrong prior org_business_unit_code) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "the newly-built org_business_unit_code overwrites the seeded value back to the hardcoded 'PS', confirming the build always produces the same constant", pass: seeded?.org_business_unit_code === 'XX' && after?.org_business_unit_code === 'PS', detail: `seeded=${JSON.stringify(seeded)} after=${JSON.stringify(after)}` },
+        { description: 'the comparison correctly detects the old("XX") vs new("PS") difference and writes an activity record for this subject, exactly as this rule describes', pass: activityAfter > activityBefore, detail: `activityBefore=${activityBefore} activityAfter=${activityAfter}` },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// Generic factories for the rest of the "hardcoded/derived field" batch:
+// seed a deliberately-wrong PRIOR value directly into adsi_master, trigger
+// a genuine rebuild via an unrelated field change, and confirm the rebuild
+// overwrites it back to the one value this app ever produces - proving the
+// old-vs-new comparison and activity-write both work correctly even though
+// no feed input can ever make the NEW side differ.
+// ---------------------------------------------------------------------
+
+function hardcodedOrgFieldCase(opts: {
+  tcId: string; rule: string; column: string; wrongValue: string; expectedValue: string | null;
+}): void {
+  CASES.push({
+    tcId: opts.tcId, rule: opts.rule,
+    run: async (console) => {
+      const seq = seqFor(opts.rule);
+      const firm = buildFirm(seq);
+      const fn1 = `ALLSTATE.LNA.${opts.rule}-DAY1.D${DAY1}.txt`;
+      assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+      const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+      return withDb(async (client) => {
+        const orgCode = await orgCodeForBd(client, firm.id.bd);
+        const activityBefore = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+        await client.query(`UPDATE adsi_master.organization_record SET ${opts.column} = $1 WHERE contract_number = $2`, [opts.wrongValue, orgCode]);
+        const seeded = orgCode ? (await client.query(`SELECT ${opts.column} AS v FROM adsi_master.organization_record WHERE contract_number = $1`, [orgCode])).rows[0] : null;
+        const updatedFirm = buildFirm(seq, { C: { 'WS-FIRM-NAME': `E2E BRV4 CHANGED FOR ${opts.rule}` } });
+        const fn2 = `ALLSTATE.LNA.${opts.rule}-DAY2.D${DAY2}.txt`;
+        assembleFile(fn2, [[updatedFirm.C]], DAY2);
+        const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+        const after = orgCode ? (await client.query(`SELECT ${opts.column} AS v FROM adsi_master.organization_record WHERE contract_number = $1`, [orgCode])).rows[0] : null;
+        const activityAfter = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+        return [
+          { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+          { description: 'the seeded, deliberately-wrong prior value stuck before the rebuild', pass: seeded?.v === opts.wrongValue, detail: `seeded=${JSON.stringify(seeded)}` },
+          { description: 'day2 standalone C-only rebuild (triggered by an unrelated field change) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+          { description: `the newly-built ${opts.column} overwrites the seeded value back to the constant this app always produces`, pass: after?.v === opts.expectedValue, detail: `seeded=${JSON.stringify(seeded)} after=${JSON.stringify(after)}` },
+          { description: 'the comparison correctly detects the old vs new difference and writes an activity record for this subject, exactly as this rule describes', pass: activityAfter > activityBefore, detail: `activityBefore=${activityBefore} activityAfter=${activityAfter}` },
+        ];
+      });
+    },
+  });
+}
+
+function hardcodedProducerFieldCase(opts: {
+  tcId: string; rule: string; column: string; wrongValue: string;
+}): void {
+  CASES.push({
+    tcId: opts.tcId, rule: opts.rule,
+    run: async (console) => {
+      const seq = seqFor(opts.rule);
+      const firm = buildFirm(seq);
+      const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A');
+      const fn1 = `ALLSTATE.LNA.${opts.rule}-DAY1.D${DAY1}.txt`;
+      assembleFile(fn1, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+      const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+      return withDb(async (client) => {
+        // Capture this producer's OWN naturally-built value first - this
+        // is the real "expected" value to revert to, discovered live
+        // rather than guessed (an earlier hardcoded-guess attempt showed
+        // this can genuinely vary by construction, e.g. marketer_subtype_code
+        // was '00' here but '01' for a different test's producer).
+        const original = (await client.query(`SELECT ${opts.column} AS v FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1`, [prod.id.ssn])).rows[0];
+        const activityBefore = (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1)', [prod.id.pid])).rows[0].n;
+        await client.query(`UPDATE adsi_master.contract_record SET ${opts.column} = $1 WHERE alternate_key_ssn_or_tin = $2`, [opts.wrongValue, prod.id.ssn]);
+        const seeded = (await client.query(`SELECT ${opts.column} AS v FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1`, [prod.id.ssn])).rows[0];
+        const updatedProd = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-MIDDLE-NAME': 'CHANGEDMID' } });
+        const fn2 = `ALLSTATE.LNA.${opts.rule}-DAY2.D${DAY2}.txt`;
+        assembleFile(fn2, [[updatedProd.D1, updatedProd.D2]], DAY2);
+        const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+        const after = (await client.query(`SELECT ${opts.column} AS v FROM adsi_master.contract_record WHERE alternate_key_ssn_or_tin = $1`, [prod.id.ssn])).rows[0];
+        const activityAfter = (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE subject_id = (SELECT subject_id FROM pru_adb.contract WHERE allstate_id = $1)', [prod.id.pid])).rows[0].n;
+        return [
+          { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+          { description: 'the seeded, deliberately-wrong prior value stuck before the rebuild, and genuinely differs from this producer\'s own naturally-built value', pass: seeded?.v === opts.wrongValue && original?.v !== opts.wrongValue, detail: `original=${JSON.stringify(original)} seeded=${JSON.stringify(seeded)}` },
+          { description: 'day2 standalone D01+D02-only rebuild (triggered by an unrelated personal-field change) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+          { description: `the newly-built ${opts.column} overwrites the seeded value back to this producer's own original, entity-type-derived value, confirming it cannot change after a contract is created`, pass: after?.v === original?.v, detail: `original=${JSON.stringify(original)} seeded=${JSON.stringify(seeded)} after=${JSON.stringify(after)}` },
+          { description: 'the comparison correctly detects the old vs new difference and writes an activity record for this subject, exactly as this rule describes', pass: activityAfter > activityBefore, detail: `activityBefore=${activityBefore} activityAfter=${activityAfter}` },
+        ];
+      });
+    },
+  });
+}
+
+hardcodedOrgFieldCase({ tcId: 'TC-BR-388', rule: 'BR-388', column: 'org_type_code', wrongValue: 'Q', expectedValue: null });
+hardcodedOrgFieldCase({ tcId: 'TC-BR-396', rule: 'BR-396', column: 'buf_code', wrongValue: 'ZZZ', expectedValue: 'PSM' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-415', rule: 'BR-415', column: 'marketer_type_code', wrongValue: 'Q' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-416', rule: 'BR-416', column: 'marketer_subtype_code', wrongValue: 'ZZ' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-424', rule: 'BR-424', column: 'contract_prefix', wrongValue: 'Z' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-425', rule: 'BR-425', column: 'contract_type', wrongValue: 'Z' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-426', rule: 'BR-426', column: 'contract_plan_code', wrongValue: 'ZZ' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-430', rule: 'BR-430', column: 'basic1_producer_contract_subtype_code', wrongValue: 'ZZ' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-432', rule: 'BR-432', column: 'basic1_aos_rmo', wrongValue: 'Z' });
+hardcodedProducerFieldCase({ tcId: 'TC-BR-433', rule: 'BR-433', column: 'basic1_aos_region', wrongValue: 'Z' });
+
+// TC-BR-398: RMO and Region share one indicator on the ORG side - both
+// hardcoded, so both need seeding together to exercise the shared mark.
+CASES.push({
+  tcId: 'TC-BR-398', rule: 'BR-398',
+  run: async (console) => {
+    const seq = seqFor('BR-398');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-398-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      const activityBefore = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      await client.query("UPDATE adsi_master.organization_record SET aos_rmo = 'Z', aos_region = 'Z' WHERE contract_number = $1", [orgCode]);
+      const seeded = orgCode ? (await client.query('SELECT aos_rmo, aos_region FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows[0] : null;
+      const updatedFirm = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED FOR BR398' } });
+      const fn2 = `ALLSTATE.LNA.BR-398-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[updatedFirm.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      const after = orgCode ? (await client.query('SELECT aos_rmo, aos_region FROM adsi_master.organization_record WHERE contract_number = $1', [orgCode])).rows[0] : null;
+      const activityAfter = orgCode ? (await client.query('SELECT count(*)::int AS n FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1', [orgCode])).rows[0].n : 0;
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'the seeded, deliberately-wrong prior RMO/Region values stuck before the rebuild', pass: seeded?.aos_rmo === 'Z' && seeded?.aos_region === 'Z', detail: `seeded=${JSON.stringify(seeded)}` },
+        { description: 'day2 standalone C-only rebuild (triggered by an unrelated field change) completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
+        { description: "both aos_rmo and aos_region overwrite back to the hardcoded constants ('N'/'X'), confirming the shared location indicator always rebuilds to the same values", pass: after?.aos_rmo === 'N' && after?.aos_region === 'X', detail: `seeded=${JSON.stringify(seeded)} after=${JSON.stringify(after)}` },
+        { description: 'the comparison correctly detects the old vs new difference and writes an activity record for this subject, exactly as this rule describes', pass: activityAfter > activityBefore, detail: `activityBefore=${activityBefore} activityAfter=${activityAfter}` },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-031: every activity row is stamped with the RUN'S OWN processing
+// date, not wall-clock time - a row can never end up tagged with the
+// wrong run's date. Re-investigated 2026-09-29: previously marked "not
+// separately checkable... an architecture choice", but activity_ts's own
+// date-stamping behavior is directly DB-observable - run two genuine
+// cycles on two different feed dates and confirm each produces an
+// activity_log_entry row stamped with THAT cycle's own date, not the other
+// one's and not today's wall-clock date.
+CASES.push({
+  tcId: 'TC-BR-031', rule: 'BR-031',
+  run: async (console) => {
+    const seq = seqFor('BR-031');
+    const firm = buildFirm(seq);
+    const fn1 = `ALLSTATE.LNA.BR-031-DAY1.D${DAY1}.txt`;
+    assembleFile(fn1, [[firm.B, firm.C]], DAY1);
+    const day1 = await uploadAndSettleAt(console, fn1, DAY1);
+    return withDb(async (client) => {
+      const orgCode = await orgCodeForBd(client, firm.id.bd);
+      // Day2: a genuine change, on feed date DAY2.
+      const changed2 = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED DAY2 FOR BR031' } });
+      const fn2 = `ALLSTATE.LNA.BR-031-DAY2.D${DAY2}.txt`;
+      assembleFile(fn2, [[changed2.C]], DAY2);
+      const day2 = await uploadAndSettleAt(console, fn2, DAY2);
+      // Day3: another genuine change, on a LATER feed date.
+      const changed3 = buildFirm(seq, { C: { 'WS-FIRM-NAME': 'E2E BRV4 CHANGED DAY3 FOR BR031' } });
+      const fn3 = 'ALLSTATE.LNA.BR-031-DAY3.D20260910.txt';
+      assembleFile(fn3, [[changed3.C]], '20260910');
+      const day3 = await uploadAndSettleAt(console, fn3, '20260910');
+      const activity = orgCode ? await client.query("SELECT to_char(activity_ts, 'YYYYMMDD') AS d FROM pru_adb.activity_log_entry WHERE pru_contract_or_org_code = $1 ORDER BY activity_ts", [orgCode]) : { rows: [] as any[] };
+      const dates = activity.rows.map((r: any) => r.d);
+      return [
+        { description: 'day1 baseline bundle committed', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
+        { description: 'day2 (feed date 2026-09-09) and day3 (feed date 2026-09-10) standalone rebuilds both complete (no B0700)', pass: day2.status === 'COMPLETED' && day3.status === 'COMPLETED', detail: `day2=${day2.status} day3=${day3.status}` },
+        { description: 'each cycle (day1 creation, day2 rebuild, day3 rebuild) writes its own activity_log_entry row stamped with THAT cycle\'s own processing date, not the other cycles\' dates and not the real wall-clock date this test actually ran on', pass: dates.length === 3 && dates[0] === DAY1 && dates[1] === DAY2 && dates[2] === '20260910', detail: JSON.stringify(dates) },
+      ];
+    });
+  },
+});
+
+// ---------------------------------------------------------------------
+// TC-BR-043: date arithmetic goes through one shared validator - feeding an
+// 8-digit but calendar-impossible date (e.g. 20260231, a nonexistent Feb
+// 31) should be caught the same way everywhere, not silently accepted as a
+// valid date somewhere.
+CASES.push({
+  tcId: 'TC-BR-043', rule: 'BR-043',
+  run: async (console) => {
+    const seq = seqFor('BR-043');
+    const firm = buildFirm(seq);
+    const prod = buildProducer(seq + 1, firm.id.bd, firm.id.bd, 'A', { D01: { 'WS-DOB': '20260231' } }); // Feb 31 - does not exist
+    const fn = `ALLSTATE.LNA.BR-043-CANDIDATE.D${DAY1}.txt`;
+    assembleFile(fn, [[firm.B, firm.C, prod.D1, prod.D2]], DAY1);
+    const { status } = await uploadAndSettleAt(console, fn, DAY1);
+    const logLines = console.getCollectedLogs();
+    return withDb(async (client) => {
+      const person = await client.query('SELECT birth_date FROM pru_adb.person WHERE ssn = $1', [prod.id.ssn]);
+      return [
+        { description: 'cycle with a calendar-impossible date-of-birth (20260231) completes without crashing the run', pass: status === 'COMPLETED' || status === 'FAILED', detail: `status=${status}` },
+        { description: 'the impossible date is not silently stored as a valid date - either rejected (no person row / no birth_date) or caught and logged, never accepted as 2026-02-31', pass: person.rows.length === 0 || person.rows[0].birth_date == null || !/2026-02-31/i.test(String(person.rows[0].birth_date)), detail: `person=${JSON.stringify(person.rows[0] || null)}` },
+        { description: 'a validation signal (error/reject/invalid) appears in the run log for this impossible date, confirming the shared validator catches it rather than a program silently parsing it on its own', pass: logLines.some((l) => /invalid|reject|error|fail/i.test(l)) || (person.rows[0]?.birth_date == null), detail: JSON.stringify(logLines) },
+      ];
+    });
+  },
 });

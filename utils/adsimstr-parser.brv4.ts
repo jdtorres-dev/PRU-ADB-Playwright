@@ -98,4 +98,12 @@ export const ADSIMSTR = {
   totNumOfSections: (rec: Buffer) => comp3Field(rec, 849, 2),
   basicMaster: (rec: Buffer, n: number) => comp3Field(rec, 805 + (n - 1) * 4, 2),
   basicOccur: (rec: Buffer, n: number) => comp3Field(rec, 807 + (n - 1) * 4, 2),
+  // ALL-BIRTH-DATE, pos 600: year PIC S9(5) COMP-3 (3 bytes), month and day
+  // each PIC S999 COMP-3 (2 bytes) - the same fixed year/month/day packed
+  // layout the rule (BR-083/BR-124) says every date in the master uses.
+  birthDate: (rec: Buffer) => ({
+    year: comp3Field(rec, 600, 3),
+    month: comp3Field(rec, 603, 2),
+    day: comp3Field(rec, 605, 2),
+  }),
 };

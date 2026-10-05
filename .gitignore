@@ -5,6 +5,14 @@ settings.local.json
 /playwright-report/
 /test-results/
 /playwright/.cache/
+/playwright-report-brv4/
+
+# Claude Code runtime state
+.claude/scheduled_tasks.lock
+
+# BRv4 feeds rewritten at runtime with fresh identities (feed-builder.brv4 assembleFile)
+/data/feeds/ALLSTATE.LNA.BR-*
+/data/feeds/ALLSTATE.LNA.VALIDATE-BR-*
 
 # Generated at runtime - execution results, downloaded artifacts, verdicts, reports
 /artifacts/
