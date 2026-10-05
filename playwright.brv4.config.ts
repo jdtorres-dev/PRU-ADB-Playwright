@@ -49,10 +49,16 @@ export default defineConfig({
     trace: 'retain-on-failure',
     video: 'off',
   },
+  // Listed in run order. With workers: 1, Playwright runs projects in the
+  // order they appear here, so a single "run all" (CLI or the UI's top-level
+  // run button) goes: upload feeds -> validate them -> DB-verified cases.
+  // Validation must come before the DB-verified cases so they write last.
+  // No `dependencies` on purpose: those would re-run the upload project
+  // whenever a single later test is run, re-presenting committed identities.
   projects: [
     {
       name: 'e2e-execute-brv4',
-      testMatch: ['e2e-brv4/**/*.spec.ts'],
+      testMatch: ['e2e-brv4/execute-feeds.brv4.spec.ts'],
       use: { browserName: 'chromium', viewport: { width: 1440, height: 900 }, acceptDownloads: true },
     },
     {
@@ -60,5 +66,20 @@ export default defineConfig({
       testMatch: ['validation-brv4/**/*.spec.ts'],
       use: { browserName: 'chromium' },
     },
+    {
+      name: 'e2e-db-brv4',
+      testMatch: ['e2e-brv4/db-verified-cases.brv4.spec.ts'],
+      use: { browserName: 'chromium', viewport: { width: 1440, height: 900 }, acceptDownloads: true },
+    },
+    // One-off maintenance specs (direct DB writes, e.g.
+    // _cleanup-stuck-queue.spec.ts) never run as part of a normal run - only
+    // when explicitly enabled with BRV4_MAINTENANCE=1.
+    ...(process.env.BRV4_MAINTENANCE === '1'
+      ? [{
+          name: 'maintenance-brv4',
+          testMatch: ['e2e-brv4/_*.spec.ts'],
+          use: { browserName: 'chromium' as const, viewport: { width: 1440, height: 900 }, acceptDownloads: true },
+        }]
+      : []),
   ],
 });

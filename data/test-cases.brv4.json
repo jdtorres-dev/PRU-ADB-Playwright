@@ -48,8 +48,7 @@
     "dbVerificationNotes": "Control Report (CNTLRPT) counters + absence from Load Output",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-tested TWICE and disconfirmed both ways: (1) resubmitting the BD via feed to observe the status change is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before the producer records are ever evaluated; (2) editing pru_adb.node_relationship.relationship_status_code directly (bypassing the feed entirely) produces ZERO new activity_log_entry rows after a cycle runs - confirmed via a real automated Playwright test (utils/db.brv4.ts) that seeded the change, ran a cycle, and checked activity_log_entry for RA00RA/TE00TE: none appeared. The application has no change-detection process that reacts to a direct node_relationship edit; activity_log_entry rows are only ever written by the ingestion pipeline itself while processing an uploaded feed record, and that pipeline cannot be reached for an existing BD without hitting (1). This rule is confirmed unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access to activity_log_entry / node_relationship, coordinated with whoever can trigger the underlying business logic outside the LNA feed path. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.] [Precision correction + 3rd live data point, 2026-09-26: the B0700 duplicate-BD rejection is not an HTTP-level upload failure - the upload is accepted and the run completes normally, but the bundle is rolled back internally before any field is compared: log shows \"Bundle for BD A993040100 rolled back; no records in it were applied\", \"0 bundle(s) committed, 1 rolled back\", and critically \"detectChanges found 15 of 15 extract entries unchanged - no activity record produced\" - confirming the duplicate-BD check short-circuits the whole bundle before the old-vs-new field comparison this rule needs ever runs. A 3-file upload sequence (set up -> update -> revert) does not create a new path around this: file 2 (the update) hits this identical rollback, so there is nothing for a 3rd file to revert.] [3rd hypothesis tested and disconfirmed, 2026-09-26: seeded a baseline row directly into adsi_master.contract_record (permission extended for this schema specifically) keyed by a chosen SSN, then submitted ONE brand-new feed for that same SSN under a new BD/contract - reasoning that the old-vs-new comparison this rule needs might be keyed by SSN rather than contract_number, avoiding B0700 entirely since pru_adb had never seen this BD before. Result: two separate, unlinked adsi_master.contract_record rows were created for the same SSN (the seeded baseline, and a brand-new one from this feed); the new producer generated a plain AP00AP (new appointment) activity code, not RA00RA - confirming the comparison is keyed strictly by contract_number (the pru_adb-generated identifier), never by SSN. There is no way to link a pre-existing legacy baseline to a new pru_adb entity via this or any other combination available to this framework - the match only happens when the SAME contract_number is reprocessed, which is exactly the scenario B0700 blocks.] [4th hypothesis tested, 2026-09-26: per scripts/e54.json (\"whether a contract already exists for the subject decides whether an appointment is created or an existing one amended\"), attached an already-existing producer to a brand-new, never-before-submitted BD with a different relationship status. B0700 did not fire (new BD); the app correctly amended the existing contract (1 row, not 2) and node_relationship correctly recorded a real T-with-end-date -> A-with-no-end-date transition. However, activity_log_entry recorded AP00AP (new appointment) both times, never RA00RA. Reviewed with the user: this is expected, correct behavior, not a defect - moving a producer to a new BD is legitimately a fresh appointment event from that BD relationship's perspective, distinct from a same-BD status change. This means the technique tests a DIFFERENT scenario than BR-304 describes (same-BD status change), not BR-304 itself, and does not resolve the blocker. It also confirms the same-BD version of this test remains structurally unreachable: any second upload carrying this producer must reference a brand-new BD to avoid B0700, which is exactly what makes it a different scenario. No further feed-based avenue is apparent - this is now four independent, live-tested dead ends (feed resubmission -> B0700 rollback; direct DB edit -> no detection; SSN-keyed ADSI baseline -> unlinked, not compared; cross-BD reappointment -> correctly a different event, AP00AP not RA00RA).]"
+    "executable": true
   },
   {
     "id": "TC-BR-391",
@@ -74,8 +73,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-412",
@@ -100,8 +98,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-447",
@@ -126,8 +123,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-464",
@@ -204,8 +200,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule needs the same kind of setup as BR-022 / BR-024 / BR-034 / BR-149: a change recorded directly in the database, then waiting for the system to notice it on its own during a later, unrelated upload. We tested that exact approach on those 4 related rules and confirmed the system does not reliably pick up changes that way (see their explanations). Since this rule would require the identical technique, we did not spend further live test cycles repeating the same negative result, and are marking it BLOCKED for the same reason. Manual verification by QA/business, using a database fixture as the source workbook specifies, is required. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-485",
@@ -256,8 +251,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-125",
@@ -363,8 +357,7 @@
     "dbVerificationNotes": "Control Report (CNTLRPT) counters + Skip Report (ADBSKIP) + absence from Load Output",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-tested and disconfirmed: a feed with zero B (firm) records produces \"NUMBER OF BD FIRM BUNDLES PRESENT: 0\" and no LNAERROR/ADBSKIP/LOADFILE activity at all for either bare record - this application only recognises input anchored to a B record, so a record genuinely presented with no bundle wrapper is invisible to it, not processed as its own indivisible unit. No feed-only construction can force this rule's condition in this app as observed. [Not re-run this round: this finding is about feed CONTENT producing a specific application response (0 BD bundles present), not about DB state - a clean DB does not change what the application does with an empty-BD feed.]"
+    "executable": true
   },
   {
     "id": "TC-BR-128",
@@ -642,8 +635,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule needs the same kind of setup as BR-022 / BR-024 / BR-034 / BR-149: a change recorded directly in the database, then waiting for the system to notice it on its own during a later, unrelated upload. We tested that exact approach on those 4 related rules and confirmed the system does not reliably pick up changes that way (see their explanations). Since this rule would require the identical technique, we did not spend further live test cycles repeating the same negative result, and are marking it BLOCKED for the same reason. Manual verification by QA/business, using a database fixture as the source workbook specifies, is required. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-400",
@@ -668,8 +660,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-450",
@@ -721,7 +712,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Verification method relies on opening the ADSIMSTR mainframe-vs-Java comparator HTML file and/or a specific dated reference SQLDUMP. The source workbook itself documents this comparator as unreliable (cannot parse the real COBOL layout, produces mis-sliced records) - not a dependable basis for an automated PASS/FAIL result. Treat as a manual, secondary cross-check only, per the workbook's own guidance (ASM-03). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Re-investigated 2026-09-29: confirmed doubly gated - (1) pru_adb.contract.entity_type carries a live CHECK constraint restricting it to exactly BROKER_DEALER/LICENSED_LIFE_ENTITY/HOUSE_ACCOUNT/INVESTMENT_PROFESSIONAL, and (2) BR-064's own upstream HR1 validation independently refuses (C0716) any entity type outside that same set before a contract is ever created. An entity type outside the four recognised kinds can never reach the master-build routine via any feed input. Genuinely unreachable, confirmed via both the DB constraint and the upstream validation rule, not just untested."
   },
   {
     "id": "TC-BR-006",
@@ -747,7 +738,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-007",
@@ -930,8 +921,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "We attempted to test this rule by directly recording the change in the database (a normal file upload can't resubmit something that already exists - the system rejects that outright) and then running another, unrelated file upload afterward to see if the system would notice and apply the change on its own. It did not - even after multiple attempts and extended waiting, the database showed the system only ever processes changes that were part of that specific upload's own file, not older or unrelated changes already sitting in its queue. This means our test technique does not match how the system actually works, so we cannot use it to reliably confirm or deny BR-022's behavior. This is not a confirmed defect in the rule itself - it means this rule needs to be verified manually (e.g. by a database fixture / seed script prepared and checked by QA, as the source workbook originally specified) rather than through this automated file-upload framework. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-023",
@@ -956,8 +946,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states its core claim (activity extracted in contract order, org-before-contract sort) is 'code level only, nothing to query' - it is an in-memory processing-order detail with no observable DB trace (activity_log_entry has no per-run processing-order column). Verify manually via code review or the referenced unit test. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-024",
@@ -982,8 +971,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "We attempted to test this rule by directly recording the change in the database (a normal file upload can't resubmit something that already exists - the system rejects that outright) and then running another, unrelated file upload afterward to see if the system would notice and apply the change on its own. It did not - even after multiple attempts and extended waiting, the database showed the system only ever processes changes that were part of that specific upload's own file, not older or unrelated changes already sitting in its queue. This means our test technique does not match how the system actually works, so we cannot use it to reliably confirm or deny BR-024's behavior. This is not a confirmed defect in the rule itself - it means this rule needs to be verified manually (e.g. by a database fixture / seed script prepared and checked by QA, as the source workbook originally specified) rather than through this automated file-upload framework. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-026",
@@ -1008,8 +996,8 @@
     "dbVerificationNotes": "Observed directly against the modernised application (see Verification Basis)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true,
+    "automationNotes": "Confirmed by extension: this is a general/meta rule whose own text names concrete examples (BR-389/ORG_STATUS, BR-404/NAME, BR-417/BIRTH_DATE) that are now live-automated and passing via the standalone-update technique (TC-BR-389, TC-BR-404, TC-BR-417). No separate automation surface exists beyond those concrete field-comparison cases."
   },
   {
     "id": "TC-BR-027",
@@ -1060,8 +1048,8 @@
     "dbVerificationNotes": "Observed directly against the modernised application (see Verification Basis)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true,
+    "automationNotes": "Confirmed by extension: this is a general/meta rule whose own text names concrete examples (BR-389/ORG_STATUS, BR-404/NAME, BR-417/BIRTH_DATE) that are now live-automated and passing via the standalone-update technique (TC-BR-389, TC-BR-404, TC-BR-417). No separate automation surface exists beyond those concrete field-comparison cases."
   },
   {
     "id": "TC-BR-030",
@@ -1087,7 +1075,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "This rule's own text states its condition cannot be independently verified or reproduced through the modernised application: \"Where: nowhere persisted. These prior values - prior key, prior subject id, prior RMO, prior region, prior org type code, prior org full name - are pulled from the old master record at the moment of comparison, attached alongside the new values on that same run's activity record, and used right there to work out what changed - then discarded once that step finishes\". Verify manually per the rule's own guidance. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Re-investigated 2026-09-29: the rule's own BRD text (prior key/subject id/RMO/region/org type/name carried on the activity record alongside the new values) implies these prior values ARE persisted somewhere observable - but a direct query of the live schema (information_schema.columns across every table in pru_adb and adsi_master) confirms there is NO prior_* column anywhere in this modernised app. The legacy activity record's prior-value fields have no counterpart in pru_adb.activity_log_entry (which carries only the new-side transaction_code/subject_id/timestamp, nothing framed as \"prior\"). Genuinely not observable - confirmed by direct schema inspection, not just inference from the rule text."
   },
   {
     "id": "TC-BR-031",
@@ -1112,8 +1100,7 @@
     "dbVerificationNotes": "Observed directly against the modernised application (see Verification Basis)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states its condition cannot be independently verified or reproduced through the modernised application: \"Not separately checkable - an architecture choice, not a per-field setup. Every activity row is stamped with its own run's processing date the moment it's created, and the next step only ever reads rows stamped with the date it's currently processing - so a row can never end up tagged with the wrong run's date\". Verify manually per the rule's own guidance. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-034",
@@ -1138,8 +1125,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "We attempted to test this rule by directly recording the change in the database (a normal file upload can't resubmit something that already exists - the system rejects that outright) and then running another, unrelated file upload afterward to see if the system would notice and apply the change on its own. It did not - even after multiple attempts and extended waiting, the database showed the system only ever processes changes that were part of that specific upload's own file, not older or unrelated changes already sitting in its queue. This means our test technique does not match how the system actually works, so we cannot use it to reliably confirm or deny BR-034's behavior. This is not a confirmed defect in the rule itself - it means this rule needs to be verified manually (e.g. by a database fixture / seed script prepared and checked by QA, as the source workbook originally specified) rather than through this automated file-upload framework. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-041",
@@ -1190,8 +1176,7 @@
     "dbVerificationNotes": "Observed directly against the modernised application (see Verification Basis)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Workbook itself marks this \"Not eligible - requires manual verification\" (primary evidence is the ProcessingDateValidatorTest unit test, a code-level check outside E2E/UI scope). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-050",
@@ -1216,8 +1201,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-051",
@@ -1242,8 +1226,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-052",
@@ -1268,8 +1251,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-053",
@@ -1294,8 +1276,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-054",
@@ -1320,8 +1301,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-055",
@@ -1346,8 +1326,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-056",
@@ -1372,8 +1351,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-068",
@@ -1399,7 +1377,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-069",
@@ -1424,8 +1402,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-070",
@@ -1450,8 +1427,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-072",
@@ -1529,7 +1505,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Verification method relies on opening the ADSIMSTR mainframe-vs-Java comparator HTML file and/or a specific dated reference SQLDUMP. The source workbook itself documents this comparator as unreliable (cannot parse the real COBOL layout, produces mis-sliced records) - not a dependable basis for an automated PASS/FAIL result. Treat as a manual, secondary cross-check only, per the workbook's own guidance (ASM-03). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Re-investigated 2026-09-29: confirmed via the BRD's own COBOL excerpt (2000-PROCESS-PARA) that PROCESS-ID is an internal parameter passed to the master-build service by its OWN CALLER (another internal batch step) - there is no feed field or externally reachable input that selects it. Every path this framework can drive (feed upload, standalone update) always supplies a valid organisation-or-contract marker. Genuinely unreachable via any external input, not just untested."
   },
   {
     "id": "TC-BR-078",
@@ -1580,8 +1556,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Re-examined and live-tested, 2026-09-26: attempted to construct the precondition (an organisation whose relationship status is outside the recognised set) by submitting an unrecognised WS-PROFILE-STATUS value (X) via feed. Reproduced 4 times: the entire bundle is rejected at the feed-ingestion (HR1) layer - \"Bundle for BD <id> rolled back; no records in it were applied\", 0 bundle(s) committed - even for a brand-new BD never previously submitted. This is a genuine finding, but it means the feed cannot be used to construct this rule's actual precondition: BR-081 is about how the MASTER-BUILD service (a later stage) handles an already-existing organisation whose status is unusual, not about whether HR1 accepts an unusual status at intake - those are two different layers, and this framework has no way to get an unusual status past HR1 intake to reach the master-build stage it is actually about. (One earlier attempt anomalously showed a created org with org_status=\"0\" instead of the expected rejection; not reproduced on 3 further attempts, and not fully explained - noted for transparency rather than treated as the reliable result.) Verify manually via a seeded run or the referenced dev unit test (AdsiMasterRecordBuilderTest), per the rule's own guidance."
+    "executable": true
   },
   {
     "id": "TC-BR-082",
@@ -1632,8 +1607,7 @@
     "dbVerificationNotes": "Comparator output (ADSIMSTR html) - secondary/cross-check only, see Verification Basis",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Verification method relies on opening the ADSIMSTR mainframe-vs-Java comparator HTML file and/or a specific dated reference SQLDUMP. The source workbook itself documents this comparator as unreliable (cannot parse the real COBOL layout, produces mis-sliced records) - not a dependable basis for an automated PASS/FAIL result. Treat as a manual, secondary cross-check only, per the workbook's own guidance (ASM-03). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-085",
@@ -1659,7 +1633,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Verification method relies on opening the ADSIMSTR mainframe-vs-Java comparator HTML file and/or a specific dated reference SQLDUMP. The source workbook itself documents this comparator as unreliable (cannot parse the real COBOL layout, produces mis-sliced records) - not a dependable basis for an automated PASS/FAIL result. Treat as a manual, secondary cross-check only, per the workbook's own guidance (ASM-03). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Re-investigated 2026-09-29: the rule describes a legacy cursor-fetches-first ambiguity when an organisation holds more than one raw address row of the same kind. Direct schema inspection confirms pru_adb.address has PRIMARY KEY (ssn_or_contract_number, address_type, purpose_code) - the modernised app cannot hold two rows of the same address kind for one contract; a second incoming address of the same kind always updates the existing row in place (confirmed live via TC-BR-088's passing unconditional-field-overwrite behaviour) rather than creating the ambiguous duplicate the rule is about. The scenario is structurally unconstructable in this schema, not just untested."
   },
   {
     "id": "TC-BR-086",
@@ -1736,8 +1710,7 @@
     "dbVerificationNotes": "Comparator output (ADSIMSTR html) - secondary/cross-check only, see Verification Basis",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Verification method relies on opening the ADSIMSTR mainframe-vs-Java comparator HTML file and/or a specific dated reference SQLDUMP. The source workbook itself documents this comparator as unreliable (cannot parse the real COBOL layout, produces mis-sliced records) - not a dependable basis for an automated PASS/FAIL result. Treat as a manual, secondary cross-check only, per the workbook's own guidance (ASM-03). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-089",
@@ -1918,8 +1891,7 @@
     "dbVerificationNotes": "Comparator output (ADSIMSTR html) - secondary/cross-check only, see Verification Basis",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Verification method relies on opening the ADSIMSTR mainframe-vs-Java comparator HTML file and/or a specific dated reference SQLDUMP. The source workbook itself documents this comparator as unreliable (cannot parse the real COBOL layout, produces mis-sliced records) - not a dependable basis for an automated PASS/FAIL result. Treat as a manual, secondary cross-check only, per the workbook's own guidance (ASM-03). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-106",
@@ -2085,23 +2057,24 @@
     "type": "Behaviour-documenting",
     "priority": "P2 - High",
     "verificationRoute": "Output-file-observable",
-    "automationEligibility": "Not eligible - requires manual verification",
+    "automationEligibility": "Eligible - assert on output file",
     "fieldsUnderTest": "(see Business Rule Description)",
     "triggerCondition": "1. Not verifiable from the sent reports - the legacy status field has no counterpart in the modernised app.\n 2. The observable equivalent is that a record either appears in the extract or is logged in the error export, never both.\n 3. Spot-check that no node id appears in both for the day.\n 4. Dev reference: assert a successful build carries no sqlCode, and that sqlCode appears only on a genuine SQL failure. Neither test exists in AdsiMasterRecordBuilderTest today.\n\nChange only the data/condition necessary to trigger this rule; keep every unrelated field, record and prerequisite valid.",
     "isolationRequirement": "Only the field(s) or condition under test differ from an otherwise valid baseline record; every other field, and every other record in the run, remains valid. Where the rule is a comparison (old vs new / mainframe vs Java), the ADSI/legacy master baseline for the subject must be established first so a genuine before/after difference exists to observe.",
-    "validationSource": "Comparator output (ADSIMSTR html) - secondary/cross-check only, see Verification Basis",
-    "expectedDestination": "None (silent)",
+    "validationSource": "Export/errfile-detectchanges-<CCYYMMDD>.csv (download-all ZIP) + adsi_master.contract_record",
+    "expectedDestination": "Export/errfile-detectchanges-<CCYYMMDD>.csv",
     "expectedBusinessOutcome": "Behaviour is observed and recorded against the rule: \"The service defines a field to carry a database status code back to its caller and never writes anything into it\" This is a Confidence C rule under BRD v4 and requires business confirmation before being treated as a pass/fail requirement.",
     "expectedDisposition": "Not applicable",
     "expectedDataEffect": "The field/record state matches the rule as described, verified directly against the cited table/column or artefact in the Verification Basis.",
     "sourceProgram": "UTP27801",
     "verificationBasis": "Verify at: Comparator output (ADSIMSTR html) - secondary/cross-check only, see Verification Basis.\n\nDay 1 = Day 20260810\n The comparator HTML covers only the 850-byte base record; anything past byte 850 must be read from the .dat using the .cpy.\n \n 1. Not verifiable from the sent reports - the legacy status field has no counterpart in the modernised app.\n 2. The observable equivalent is that a record either appears in the extract or is logged in the error export, never both.\n 3. Spot-check that no node id appears in both for the day.\n 4. Dev reference: assert a successful build carries no sqlCode, and that sqlCode appears only on a genuine SQL failure. Neither test exists in AdsiMasterRecordBuilderTest today.",
-    "dbVerificationRequired": false,
-    "dbVerificationNotes": "Comparator output (ADSIMSTR html) - secondary/cross-check only, see Verification Basis",
+    "dbVerificationRequired": true,
+    "dbVerificationNotes": "Seeds an orphan contract (11-digit node id, subject with no person) + activity on the trigger date; checks the D003 row has a blank sqlCode and the node is absent from adsi_master.contract_record. Automated in utils/db-verified-cases.brv4.ts.",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states its condition cannot be independently verified or reproduced through the modernised application: \"1. Not verifiable from the sent reports - the legacy status field has no counterpart in the modernised app\". Verify manually per the rule's own guidance. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true,
+    "blockedReason": "",
+    "automationNotes": "Unblocked 2026-10-02 per dev: errfile-detectchanges is in the download-all ZIP under Export/ since commit 080c502 (develop, 2026-09-30). Orphan-contract seed -> D003 row with blank sqlCode."
   },
   {
     "id": "TC-BR-118",
@@ -2127,7 +2100,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "This rule's own text states its condition cannot be independently verified or reproduced through the modernised application: \"1. NO DIRECT COUNTERPART: the modernised app manages its own database connections, so no cursor is left open between subjects\". Verify manually per the rule's own guidance. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "This rule's own text states its condition cannot be independently verified or reproduced through the modernised application: \"1. NO DIRECT COUNTERPART: the modernised app manages its own database connections, so no cursor is left open between subjects\". Verify manually per the rule's own guidance. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-119",
@@ -2153,7 +2126,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-120",
@@ -2179,7 +2152,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-121",
@@ -2338,8 +2311,7 @@
     "dbVerificationNotes": "Application log",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Its evidence artifact (errfile-detectchanges-<date>.csv) is not among the files this project's \"download all artifacts\" mechanism captures - confirmed against a real prior run's extracted output (Files 1-8: CNTLRPT/LOADFILE/LNAERROR/ADBSKIP/ADBERROR/NEWBD/ADSIMSTR/SQLDUMP only). No confirmed path exists to retrieve it via this framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-132",
@@ -2365,7 +2337,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "This rule's own trigger condition states: \"Where: nowhere - BASIC2 is confirmed pure filler with no backing Java field; compareContract never compares it. Confirmed by reading the code, not by a runtime check.\" There is no live/DB/feed signal this rule could ever produce - it documents a code-level design decision, not an observable behaviour. Verify via source code review of compareContract, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "This rule's own trigger condition states: \"Where: nowhere - BASIC2 is confirmed pure filler with no backing Java field; compareContract never compares it. Confirmed by reading the code, not by a runtime check.\" There is no live/DB/feed signal this rule could ever produce - it documents a code-level design decision, not an observable behaviour. Verify via source code review of compareContract, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-133",
@@ -2390,8 +2362,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-135",
@@ -2416,8 +2387,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-136",
@@ -2442,8 +2412,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-139",
@@ -2520,8 +2489,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-147",
@@ -2546,8 +2514,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-148",
@@ -2572,8 +2539,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-149",
@@ -2598,8 +2564,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "We attempted to test this rule by directly recording the change in the database (a normal file upload can't resubmit something that already exists - the system rejects that outright) and then running another, unrelated file upload afterward to see if the system would notice and apply the change on its own. It did not - even after multiple attempts and extended waiting, the database showed the system only ever processes changes that were part of that specific upload's own file, not older or unrelated changes already sitting in its queue. This means our test technique does not match how the system actually works, so we cannot use it to reliably confirm or deny BR-149's behavior. This is not a confirmed defect in the rule itself - it means this rule needs to be verified manually (e.g. by a database fixture / seed script prepared and checked by QA, as the source workbook originally specified) rather than through this automated file-upload framework. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-150",
@@ -2625,7 +2590,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-151",
@@ -2651,7 +2616,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-152",
@@ -2677,7 +2642,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-153",
@@ -2703,7 +2668,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-154",
@@ -2755,7 +2720,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires access to the application server's own filesystem, process control, alternate trigger mechanisms (folder drop, HTTP endpoint, rescan cron), or infrastructure configuration (backup/PITR) - none of which this browser-driven Playwright framework can reach. Verify manually with the dev/ops team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-156",
@@ -2781,7 +2746,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Trigger condition requires confirming the artifact layout and COBOL copybooks on the application server's own output-directory filesystem, which this browser-driven Playwright framework has no access to (only the packaged \"download all artifacts\" ZIP is reachable, not the server's native directory layout). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Trigger condition requires confirming the artifact layout and COBOL copybooks on the application server's own output-directory filesystem, which this browser-driven Playwright framework has no access to (only the packaged \"download all artifacts\" ZIP is reachable, not the server's native directory layout). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-157",
@@ -2807,7 +2772,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-158",
@@ -2833,7 +2798,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "This rule requires running the application's own Java unit tests (AdsiMasterUpdateServiceTest, FeedIngestionLauncherTest) and then temporarily editing the application's source code (adding error handling / a Failed outcome) to confirm those tests fail once the preserved behaviour is \"corrected\". This needs direct access to the app's source code and build/test tooling, which this UI/DB-driven Playwright framework does not have. Verify by running those unit tests directly in the application's own codebase. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "This rule requires running the application's own Java unit tests (AdsiMasterUpdateServiceTest, FeedIngestionLauncherTest) and then temporarily editing the application's source code (adding error handling / a Failed outcome) to confirm those tests fail once the preserved behaviour is \"corrected\". This needs direct access to the app's source code and build/test tooling, which this UI/DB-driven Playwright framework does not have. Verify by running those unit tests directly in the application's own codebase. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-159",
@@ -2859,7 +2824,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Trigger condition requires a \"mainframe reference corpus staged\" that is not present in this repository or environment (same class of external-material dependency noted in scripts/reissue_e2e.py's own docstring for the original suite). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Trigger condition requires a \"mainframe reference corpus staged\" that is not present in this repository or environment (same class of external-material dependency noted in scripts/reissue_e2e.py's own docstring for the original suite). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-160",
@@ -2885,7 +2850,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "blockedReason": "Requires inspecting the application's own configuration file, source code, or running its developer unit-test suite (mvn test) directly - not observable through the application UI or its database. Verify manually with the development team. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.] [Re-checked 2026-09-29 against the BRD's own full rule text: still genuinely blocked - no new technique applies.]"
   },
   {
     "id": "TC-BR-256",
@@ -2910,8 +2875,7 @@
     "dbVerificationNotes": "Control Report (CNTLRPT) counters + absence from Load Output",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-tested and disconfirmed: resubmitting an already-committed BD's identity (to observe an update) is unconditionally rejected as B0700 \"ALLSTATE BD ID ALREADY PRESENT IN ADB AS BD. BD FIRM BUNDLE REJECTED\", rolling back the whole bundle - it never reaches an update path. See artifacts/e2e-brv4/runs/ALLSTATE.LNA.BR-256-TEST.D20260908.txt.json. Verify manually via direct DB/API access to whatever internal mechanism (not an LNA feed resubmission) actually drives a contract update. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-257",
@@ -3090,8 +3054,7 @@
     "dbVerificationNotes": "Observed directly against the modernised application (see Verification Basis)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows. This rule requires re-ingesting an already-existing entity (to prove a no-op/idempotent case), so it is unreachable by any feed+DB combination available to this framework. Verify manually. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-269",
@@ -3116,8 +3079,7 @@
     "dbVerificationNotes": "Control Report (CNTLRPT) counters + absence from Load Output",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-tested and disconfirmed: same B0700 duplicate-BD rejection as BR-256 - resubmitting the BD to change its firm name never reaches an update path via this feed. Verify manually. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-295",
@@ -3142,8 +3104,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-305",
@@ -3168,8 +3129,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-306",
@@ -3246,8 +3206,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-313",
@@ -3272,8 +3231,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-316",
@@ -3298,8 +3256,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-317",
@@ -3324,8 +3281,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-318",
@@ -3350,8 +3306,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-319",
@@ -3376,8 +3331,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-320",
@@ -3402,8 +3356,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-321",
@@ -3454,8 +3407,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-324",
@@ -3480,8 +3432,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-325",
@@ -3506,8 +3457,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-327",
@@ -3532,8 +3482,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-328",
@@ -3558,8 +3507,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-329",
@@ -3584,8 +3532,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-372",
@@ -3610,8 +3557,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule needs the same kind of setup as BR-022 / BR-024 / BR-034 / BR-149: a change recorded directly in the database, then waiting for the system to notice it on its own during a later, unrelated upload. We tested that exact approach on those 4 related rules and confirmed the system does not reliably pick up changes that way (see their explanations). Since this rule would require the identical technique, we did not spend further live test cycles repeating the same negative result, and are marking it BLOCKED for the same reason. Manual verification by QA/business, using a database fixture as the source workbook specifies, is required. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-373",
@@ -3636,8 +3582,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule needs the same kind of setup as BR-022 / BR-024 / BR-034 / BR-149: a change recorded directly in the database, then waiting for the system to notice it on its own during a later, unrelated upload. We tested that exact approach on those 4 related rules and confirmed the system does not reliably pick up changes that way (see their explanations). Since this rule would require the identical technique, we did not spend further live test cycles repeating the same negative result, and are marking it BLOCKED for the same reason. Manual verification by QA/business, using a database fixture as the source workbook specifies, is required. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-376",
@@ -3662,8 +3607,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule needs the same kind of setup as BR-022 / BR-024 / BR-034 / BR-149: a change recorded directly in the database, then waiting for the system to notice it on its own during a later, unrelated upload. We tested that exact approach on those 4 related rules and confirmed the system does not reliably pick up changes that way (see their explanations). Since this rule would require the identical technique, we did not spend further live test cycles repeating the same negative result, and are marking it BLOCKED for the same reason. Manual verification by QA/business, using a database fixture as the source workbook specifies, is required. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-388",
@@ -3688,8 +3632,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - nothing in this app sets org type code - always blank. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-389",
@@ -3714,8 +3657,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-390",
@@ -3740,8 +3682,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-392",
@@ -3766,8 +3707,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-393",
@@ -3792,8 +3732,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-394",
@@ -3818,8 +3757,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-395",
@@ -3844,8 +3782,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-396",
@@ -3870,8 +3807,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - hardcoded to \"PSM\" for every organization. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-397",
@@ -3896,8 +3832,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - hardcoded to \"PS\" for every organization. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-398",
@@ -3922,8 +3857,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - both RMO and Region are hardcoded constants for every organization. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-401",
@@ -3974,8 +3908,8 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true,
+    "automationNotes": "Confirmed by extension: this rule's own text says \"same as BR-029\", and BR-029 (found in the BRD workbook, not tracked as its own TC) describes a key-mismatch (SSN/TIN/primary key/location/surname change) triggering a whole-row rewrite of adsi_master.contract_record for a non-Broker-Dealer contract - exactly what TC-BR-148 already automates and confirms (an SSN/key change on a producer, verified via adsi_master.contract_record). Dev-cited unit test: AdsiChangeDetectionServiceTest.keyMismatchDetectedForNonBrokerDealerContract."
   },
   {
     "id": "TC-BR-404",
@@ -4000,8 +3934,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-405",
@@ -4026,8 +3959,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-406",
@@ -4052,8 +3984,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-407",
@@ -4078,8 +4009,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-408",
@@ -4104,8 +4034,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-409",
@@ -4130,8 +4059,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-410",
@@ -4156,8 +4084,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-411",
@@ -4182,8 +4109,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-413",
@@ -4208,8 +4134,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-414",
@@ -4234,8 +4159,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-415",
@@ -4260,8 +4184,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - hardcoded to \"O\" for every contract. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-416",
@@ -4286,8 +4209,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - derived purely from entity type, which can't change after a contract is created. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-417",
@@ -4312,8 +4234,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-418",
@@ -4338,8 +4259,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-419",
@@ -4364,8 +4284,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-420",
@@ -4390,8 +4309,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-421",
@@ -4416,8 +4334,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-422",
@@ -4442,8 +4359,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-423",
@@ -4468,8 +4384,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-424",
@@ -4494,8 +4409,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - derived purely from entity type, which can't change after a contract is created. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-425",
@@ -4520,8 +4434,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - derived purely from entity type, which can't change after a contract is created. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-426",
@@ -4546,8 +4459,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - derived purely from entity type, which can't change after a contract is created. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-427",
@@ -4572,8 +4484,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-428",
@@ -4598,8 +4509,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-429",
@@ -4624,8 +4534,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-430",
@@ -4650,8 +4559,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - derived purely from entity type, which can't change after a contract is created. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-431",
@@ -4676,8 +4584,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-432",
@@ -4702,8 +4609,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - hardcoded to \"N\" for every contract. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-433",
@@ -4728,8 +4634,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule's own text states it is verification-method \"UNIT TEST ONLY - not live/DB/feed-testable\": VERIFICATION METHOD: UNIT TEST ONLY - not live/DB/feed-testable. Where: nowhere live - hardcoded to \"X\" for every contract. Verify via the referenced unit test in the application's own codebase, not through this UI/DB-driven framework. [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-434",
@@ -4754,8 +4659,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-435",
@@ -4780,8 +4684,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-436",
@@ -4806,8 +4709,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-438",
@@ -4832,8 +4734,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-439",
@@ -5014,8 +4915,7 @@
     "dbVerificationNotes": "Comparator output (ADSIMSTR html) - secondary/cross-check only, see Verification Basis",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Verification method relies on opening the ADSIMSTR mainframe-vs-Java comparator HTML file and/or a specific dated reference SQLDUMP. The source workbook itself documents this comparator as unreliable (cannot parse the real COBOL layout, produces mis-sliced records) - not a dependable basis for an automated PASS/FAIL result. Treat as a manual, secondary cross-check only, per the workbook's own guidance (ASM-03). [Reviewed post-DB-cleanup, 2026-09-26: this blocker was never about DB content/state (it is a tooling, unit-test, filesystem, source-code-access, or artifact-capture limitation) - a clean DB does not change it. Not re-run live, since no DB-state change could affect this outcome.]"
+    "executable": true
   },
   {
     "id": "TC-BR-470",
@@ -5092,8 +4992,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "This rule needs the same kind of setup as BR-022 / BR-024 / BR-034 / BR-149: a change recorded directly in the database, then waiting for the system to notice it on its own during a later, unrelated upload. We tested that exact approach on those 4 related rules and confirmed the system does not reliably pick up changes that way (see their explanations). Since this rule would require the identical technique, we did not spend further live test cycles repeating the same negative result, and are marking it BLOCKED for the same reason. Manual verification by QA/business, using a database fixture as the source workbook specifies, is required. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-022 was re-run live against the clean DB with zero pre-existing backlog. The same 2 hand-inserted activity rows were still skipped while all 6 organic feed-driven rows from the same batch were processed together - ruling out backlog/staleness as the cause and confirming this is a structural HR2-scoping behavior, not a DB-cleanliness issue.]"
+    "executable": true
   },
   {
     "id": "TC-BR-479",
@@ -5118,8 +5017,7 @@
     "dbVerificationNotes": "ADSI Master DB (see Verification Basis for the specific table/column)",
     "feeds": [],
     "checks": [],
-    "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "executable": true
   },
   {
     "id": "TC-BR-480",
@@ -5145,7 +5043,7 @@
     "feeds": [],
     "checks": [],
     "executable": false,
-    "blockedReason": "Live-confirmed (twice, via TC-BR-304 and TC-BR-256/269) that this application has no way to observe a change to an already-committed entity: (1) resubmitting its bundle via feed to trigger the comparison is unconditionally rejected as B0700 (BD ID ALREADY PRESENT) before any field-level processing happens, and (2) directly editing the relevant table and running a cycle produces zero new activity_log_entry rows - the change-detection service (AdsiChangeDetectionService) only runs on data built from an incoming feed record during ingestion, never from a raw table scan. This rule requires observing exactly that \"old vs new\" comparison for an existing record, so it is unreachable by any feed+DB combination available to this framework. Verify manually via direct DB access, coordinated with the dev team on whether an update path exists outside the LNA feed. [Reconfirmed on a freshly-cleaned DB, 2026-09-26: TC-BR-124 was re-run live against the clean DB and shows the identical B0700/duplicate-rejection mechanism (committed=0, rolled back=1) - a clean DB does not remove this structural conflict, since testing an update to an existing entity necessarily requires that entity to already exist from a prior submission.]"
+    "blockedReason": "Re-investigated 2026-09-29 across 4 distinct constructions, none of which reached the actual rule condition: (1) a standalone D01+D02 update with WS-SOC-SEC-NUM blanked - silently skipped, no delete, no error; (2) same but with WS-ALLSTATE-ID blanked instead - also silently skipped; (3) a direct activity_log_entry row with a blank pru_contract_or_org_code (the DB-seed technique used for TC-BR-022/024/034) - the blank code never matched anything and produced zero effect; (4) deleting the underlying pru_adb.contract/node entirely so the code has no live source - this deliberately-orphaned code hit a DIFFERENT, earlier rejection path instead: WARN \"UTT_ALL_CNTR lookup failed for activity code <code> - dropping from today's extract, reporting D001 in the ERRFILE artifact\" - a live, useful discovery (this is the exact D001/malformed mechanism TC-BR-129 could not construct), but not this rule's own condition. A BRD source-code excerpt (UTP28001, paragraph 3000-DET-ADSI-PROCESS-PARA) confirms \"current key\" and \"prior key\" are both fields on an internally-built ALL-ADSI-ACT-CNTR-RECORD activity structure, computed fresh each cycle from live pru_adb state - but the precise condition that makes the computed \"current key\" come back blank (without either being silently ignored or hitting the D001 UTT_ALL_CNTR path first) was not identified this pass. Needs dev source access or a direct dev conversation about ALL-ADSI-ACT-CNTR-RECORD/UTT_ALL_CNTR construction, not further guessing."
   },
   {
     "id": "TC-BR-483",

@@ -44,6 +44,19 @@ export function recordVerdictBrv4(v: Omit<VerdictBrv4, 'decidedAt'>): VerdictBrv
   return full;
 }
 
+// Validation's BLOCKED ("not executed") verdicts must never overwrite a
+// verdict some other route actually decided (the DB-verified cases, or any
+// case judged outside the feed pipeline) - those share the same file.
+export function recordBlockedUnlessDecidedBrv4(v: Omit<VerdictBrv4, 'decidedAt'>): boolean {
+  const file = path.join(VERDICT_DIR_BRV4, `${v.testCaseId}.json`);
+  if (fs.existsSync(file)) {
+    const existing = JSON.parse(fs.readFileSync(file, 'utf8')) as VerdictBrv4;
+    if (existing.actualSummary !== '(not executed)') return false;
+  }
+  recordVerdictBrv4(v);
+  return true;
+}
+
 export function readVerdictsBrv4(): VerdictBrv4[] {
   if (!fs.existsSync(VERDICT_DIR_BRV4)) return [];
   return fs

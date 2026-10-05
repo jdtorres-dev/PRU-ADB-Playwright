@@ -17,6 +17,156 @@ workbook.
 **Nothing here has been executed against the live environment yet.** See
 *Execution status* at the bottom.
 
+## ⚠️ IMPORTANT — Test flow, step by step
+
+Both suites (the original 85-feed suite and the BRv4 suite) follow the same
+sequence: **login → set feed date → upload feed → wait for the run to settle
+→ download the artifacts ZIP → judge each test case**. Upload (execute) and
+judging (validate) are separate phases.
+
+> **The environment has no data reset.** A committed feed can never be
+> presented again with the same identifiers — doing so raises **B0700**
+> instead of the rule under test. Never re-upload positive/setup feeds
+> casually, and never run uploads in parallel (the configs already force
+> `workers: 1`, `retries: 0`).
+
+### A. Manual testing (browser)
+
+1. Open `BASE_URL` (default
+   `https://pru-adb-dev.ap-southeast-1.elasticbeanstalk.com`) and accept the
+   certificate warning (the dev host's certificate is not trusted).
+2. Log in with `ADB_USERNAME` / `ADB_PASSWORD` from `.env`.
+3. Open the **Upload** tab.
+4. Set **Feed Date** to the date in the feed filename — e.g.
+   `...D20260908.txt` → `20260908`. For multi-day rules
+   (`BR-031-DAY1/2/3`, `BR-050-DAY1/2`, …) each day's file carries its own
+   date (`D20260908`, `D20260909`, `D20260910`).
+5. Choose the file from `data/feeds/`, in the order listed in
+   `data/feeds.brv4.json` (BRv4) or `data/feeds.json` (original). A rule's
+   `setup` / `DAY1` / `CANDIDATE` feed must go **before** its `TRIGGER` /
+   `DAY2` feed.
+6. Click **Upload** and note the **Run ID**.
+7. Watch the Live console until the status leaves
+   `ACCEPTED` / `IN_PROGRESS` / `RUNNING` (can take a few minutes).
+8. Enter the Run ID → **Lookup** → **General Artifacts → ALL (.zip)**.
+9. Compare the artifacts with the case in `data/test-cases.brv4.json` (or
+   `data/test-cases.json`):
+   - **Negative** — the `expectedCode` appears in the LNA error report
+     against that bundle. A *different* code firing is a `FAIL` (possible
+     masking).
+   - **Positive** — no refusal **and** the broker-dealer identifier is in the
+     LOADFILE.
+   - **CNTLRPT** — either the header is refused, or the controls are
+     reported satisfied.
+10. DB-verified cases only: confirm the result in Postgres (e.g.
+    `pru_adb.activity_log_entry`, `adsi_master.master_control`) using the
+    `host` / `port` / `user` / `pass` / `database` keys in `.env`.
+
+### B. Playwright
+
+**One-time setup**
+
+```bash
+npm install
+npx playwright install chromium
+cp .env.example .env    # BASE_URL, ADB_USERNAME, ADB_PASSWORD, FEED_DATE (+ DB keys for BRv4)
+npm run typecheck
+```
+
+**Step 1 — Smoke-test the framework (safe to repeat)**
+
+```bash
+npx playwright test --project=smoke --grep "verdict"   # offline unit tests of the judging logic
+npx playwright test --project=smoke --grep "login"     # live login only, uploads nothing
+npm run test:smoke                                      # all smoke tests, incl. one negative feed (TC-BR-018)
+```
+
+Add `--headed` to watch the browser, or `--debug` to step through with the
+Playwright Inspector.
+
+**Step 2a — Original suite (85 feeds / 284 cases)**
+
+```bash
+npm run e2e:execute:plan    # list what would be uploaded (uploads nothing)
+npm run e2e:execute         # upload every feed → artifacts/e2e/runs/
+npm run e2e:validate        # judge every case; touches nothing, re-runnable
+npm run report:build        # artifacts/e2e/reports/traceability-report.csv + summary.md
+```
+
+**Step 2b — BRv4 suite** (separate config, no npm shortcuts — always pass
+`-c playwright.brv4.config.ts`)
+
+```bash
+# see the plan
+npx playwright test -c playwright.brv4.config.ts --project=e2e-execute-brv4 --list
+
+# 1. execute — uploads feeds in data/feeds.brv4.json order → artifacts/e2e-brv4/runs/
+npx playwright test -c playwright.brv4.config.ts --project=e2e-execute-brv4
+
+# 2. validate (offline)
+npx playwright test -c playwright.brv4.config.ts --project=e2e-validate-brv4
+
+# 3. DB-verified cases (seed → run a cycle → assert in Postgres)
+npx playwright test -c playwright.brv4.config.ts --project=e2e-db-brv4
+
+# 4. reports
+npx playwright show-report playwright-report-brv4
+node scripts/regen-final-report-brv4.js     # artifacts/reports/final-verdict-report-brv4.{csv,xlsx}
+```
+
+Running with no `--project` (or the top-level run button in UI mode) runs
+all three projects **one test at a time, in the order above** — the config
+pins `workers: 1`, and projects run in the order they are listed. Only do
+that against a clean DB: step 1 re-uploads the feeds.
+
+For interactive runs use UI mode:
+`npx playwright test -c playwright.brv4.config.ts --ui` (the VS Code
+extension panel does not load this config reliably).
+
+> `tests/e2e-brv4/_cleanup-stuck-queue.spec.ts` performs a direct DB
+> `UPDATE`. It belongs to no project, so it never runs as part of a normal
+> execution; enable it explicitly with `BRV4_MAINTENANCE=1` (project
+> `maintenance-brv4`).
+
+**Run a single feed or test case**
+
+```bash
+# upload one feed only
+npx playwright test -c playwright.brv4.config.ts --project=e2e-execute-brv4 --grep "BR-022"
+
+# judge one case only (needs that feed's run record from the execute phase)
+npx playwright test -c playwright.brv4.config.ts --project=e2e-validate-brv4 --grep "TC-BR-022"
+
+# run one DB-verified case only
+npx playwright test -c playwright.brv4.config.ts --project=e2e-db-brv4 --grep "TC-BR-051"
+```
+
+For the original suite, drop `-c ...` and use `--project=e2e-execute` /
+`--project=e2e-validate`.
+
+### Where results land
+
+| What | Original suite | BRv4 |
+|---|---|---|
+| Run records + extracted ZIPs | `artifacts/e2e/runs/` | `artifacts/e2e-brv4/runs/` |
+| Verdict per case | `artifacts/e2e/verdicts/` | `artifacts/e2e-brv4/verdicts/` |
+| HTML report | `playwright-report/` | `playwright-report-brv4/` |
+| Failure traces / screenshots | `test-results/` (`npx playwright show-trace <zip>`) | same |
+
+### Gotchas
+
+- **Original suite:** before re-executing against an environment that has
+  already seen the feeds, reissue a fresh generation
+  (`npm run reissue -- <n>`, needs Python — see *How to reissue test data*).
+- **BRv4:** identifiers are permanent (generation 99). Setup and positive
+  feeds can be committed only once.
+- **BRv4 feed date:** the execute spec uses a single `BRV4_FEED_DATE`
+  (default `20260908`) for every file. Verify this against the `DAY2` /
+  `DAY3` feeds (`D20260909` / `D20260910`) if their runs look wrong.
+- **BRv4 report script:** `scripts/regen-final-report-brv4.js` loads `xlsx`
+  from `%TEMP%\xlsxreader\node_modules` and fails if that folder does not
+  exist.
+
 ## What it covers
 
 Read from the current `data/test-cases.json` / `data/feeds.json` — the actual

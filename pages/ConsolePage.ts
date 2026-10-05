@@ -49,6 +49,7 @@ export class ConsolePage {
    * as the dashboard does.
    */
   private collectedLogs: string[] = [];
+  private logSince = 0;
 
   getCollectedLogs(): string[] {
     return this.collectedLogs;
@@ -114,42 +115,8 @@ export class ConsolePage {
     const deadline = Date.now() + timeoutMs;
     let last: any = null;
     this.collectedLogs = [];
-    let since = 0;
-
-    const drainLogs = async () => {
-      try {
-        const body = await this.page.evaluate(
-          async ([id, from]) => {
-            const res = await fetch(
-              `/api/v1/ingestion/runs/${encodeURIComponent(id as string)}/logs?since=${from}`,
-              { headers: { Accept: 'application/json' } },
-            );
-            if (!res.ok) return null;
-            return res.json();
-          },
-          [runId, since] as const,
-        );
-        // Each line is {timestamp, level, message} - not a string. Rendered
-        // the way the dashboard renders it, so a saved log reads like the
-        // Live console itself.
-        if (body?.lines?.length) {
-          for (const line of body.lines as Array<Record<string, unknown>>) {
-            if (typeof line === 'string') {
-              this.collectedLogs.push(line);
-              continue;
-            }
-            const ts = line.timestamp ? String(line.timestamp) : '';
-            const level = String(line.level ?? 'INFO').toUpperCase();
-            const msg = String(line.message ?? '');
-            this.collectedLogs.push(`${ts} ${level} ${msg}`.trim());
-          }
-        }
-        if (typeof body?.nextSince === 'number') since = body.nextSince;
-      } catch {
-        // Best effort, as on the dashboard: the console enriches the record,
-        // it is not the source of truth for whether the run finished.
-      }
-    };
+    this.logSince = 0;
+    const drainLogs = () => this.drainLogs(runId);
 
     while (Date.now() < deadline) {
       await drainLogs();
@@ -169,6 +136,73 @@ export class ConsolePage {
       await this.page.waitForTimeout(1500);
     }
     throw new Error(`Run ${runId} did not settle within ${timeoutMs}ms (last status ${last?.status})`);
+  }
+
+  /**
+   * Appends any new /logs lines for the run to collectedLogs. Returns the
+   * HTTP status (0 if the request itself failed) so callers can tell a
+   * gone buffer (404) from a quiet one.
+   */
+  private async drainLogs(runId: string): Promise<number> {
+    try {
+      const body = await this.page.evaluate(
+        async ([id, from]) => {
+          const res = await fetch(
+            `/api/v1/ingestion/runs/${encodeURIComponent(id as string)}/logs?since=${from}`,
+            { headers: { Accept: 'application/json' } },
+          );
+          if (!res.ok) return { httpStatus: res.status };
+          return { httpStatus: res.status, ...(await res.json()) };
+        },
+        [runId, this.logSince] as const,
+      );
+      // Each line is {timestamp, level, message} - not a string. Rendered
+      // the way the dashboard renders it, so a saved log reads like the
+      // Live console itself.
+      if (body?.lines?.length) {
+        for (const line of body.lines as Array<Record<string, unknown>>) {
+          if (typeof line === 'string') {
+            this.collectedLogs.push(line);
+            continue;
+          }
+          const ts = line.timestamp ? String(line.timestamp) : '';
+          const level = String(line.level ?? 'INFO').toUpperCase();
+          const msg = String(line.message ?? '');
+          this.collectedLogs.push(`${ts} ${level} ${msg}`.trim());
+        }
+      }
+      if (typeof body?.nextSince === 'number') this.logSince = body.nextSince;
+      return Number(body?.httpStatus ?? 0);
+    } catch {
+      // Best effort, as on the dashboard: the console enriches the record,
+      // it is not the source of truth for whether the run finished.
+      return 0;
+    }
+  }
+
+  /**
+   * HR2 (the adsi_master sync) runs after the run itself reports COMPLETED,
+   * and a failed HR2 still leaves the run COMPLETED (BR-131). Keeps draining
+   * the run's logs until HR2's own result line for the run's feed date shows
+   * up: "HR2 sync run for <date> complete: ..." or "HR2 sync run for feed
+   * date <date> failed". Call right after waitForRunToSettle on the same run.
+   *
+   * Returns NOT_SEEN if the log buffer is gone (repeated 404) or the timeout
+   * passes first - the caller decides what that means.
+   */
+  async waitForHr2(runId: string, feedDate: string, timeoutMs = 180_000): Promise<'COMPLETE' | 'FAILED' | 'NOT_SEEN'> {
+    const iso = `${feedDate.slice(0, 4)}-${feedDate.slice(4, 6)}-${feedDate.slice(6, 8)}`;
+    const done = new RegExp(`HR2 sync run for ${iso} complete`);
+    const failed = new RegExp(`HR2 sync run for feed date ${iso} failed`);
+    const deadline = Date.now() + timeoutMs;
+    let gone = 0;
+    while (true) {
+      if (this.collectedLogs.some((l) => failed.test(l))) return 'FAILED';
+      if (this.collectedLogs.some((l) => done.test(l))) return 'COMPLETE';
+      if (gone >= 3 || Date.now() >= deadline) return 'NOT_SEEN';
+      await this.page.waitForTimeout(1500);
+      gone = (await this.drainLogs(runId)) === 404 ? gone + 1 : 0;
+    }
   }
 
   /**
