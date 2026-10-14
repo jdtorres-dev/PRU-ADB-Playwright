@@ -4,6 +4,7 @@ import { identity, buildFirm, buildSubsequentFirm, buildProducer, assembleFile, 
 import * as path from 'path';
 import * as fs from 'fs';
 import { summariseLogs } from './verdict-store';
+import { noteUploadBrv4, runDirBrv4 } from './verdict-store.brv4';
 import AdmZip from 'adm-zip';
 import { findAdsimstrRecordBySsn, findAdsimstrRecordByContractNumber, ADSIMSTR, ADSIMSTR_ORG_FAX } from './adsimstr-parser.brv4';
 
@@ -154,6 +155,7 @@ async function uploadAndSettleAt(console: ConsolePage, fileName: string, feedDat
   await console.setFeedDate(feedDate);
   await console.chooseFile(path.join(FEEDS_DIR, fileName));
   const runId = await console.submitAndGetRunId();
+  noteUploadBrv4(runId);
   const { status, hr2 } = await settleWithHr2(console, runId, feedDate);
   return { runId, status, hr2 };
 }
@@ -167,7 +169,7 @@ async function uploadAndSettleAt(console: ConsolePage, fileName: string, feedDat
 // comparator and copybook are never needed; ADSIMSTR.cpy ships inside this
 // same ZIP, and its byte positions are hardcoded in adsimstr-parser.brv4.ts).
 async function downloadAdsimstrExtract(console: ConsolePage, runId: string): Promise<Buffer> {
-  const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+  const runDir = runDirBrv4(runId, currentTcId);
   const zipPath = path.join(runDir, `ingestion-artifacts-${runId}.zip`);
   await console.openRun(runId);
   await console.downloadAllArtifacts(zipPath);
@@ -187,10 +189,10 @@ async function downloadAndFindAdsimstrRecord(console: ConsolePage, runId: string
 // confirmed by dev (DEF-RDMS-BRV4-015) after QA mistakenly checked the run
 // log instead. Reuses the same run directory downloadAdsimstrExtract already
 // populates if it was called first in the same test; otherwise downloads fresh.
-async function downloadLnaerrorFile(console: ConsolePage, runId: string): Promise<string> {
-  const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+async function downloadLnaerrorFile(console: ConsolePage, runId: string, feedDate = FEED_DATE): Promise<string> {
+  const runDir = runDirBrv4(runId, currentTcId);
   const extractDir = path.join(runDir, 'extracted');
-  const txtPath = path.join(extractDir, `Day ${FEED_DATE}`, 'File 3 - LNAERROR', `lnaerror-${FEED_DATE}.txt`);
+  const txtPath = path.join(extractDir, `Day ${feedDate}`, 'File 3 - LNAERROR', `lnaerror-${feedDate}.txt`);
   if (!fs.existsSync(txtPath)) {
     const zipPath = path.join(runDir, `ingestion-artifacts-${runId}.zip`);
     await console.openRun(runId);
@@ -203,7 +205,7 @@ async function downloadLnaerrorFile(console: ConsolePage, runId: string): Promis
 // Downloads the run's artifacts ZIP (once per run) and reads the CNTLRPT
 // (File 1) for the given cycle date. Counters are per run.
 async function downloadCntlrpt(console: ConsolePage, runId: string, feedDate: string): Promise<string> {
-  const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+  const runDir = runDirBrv4(runId, currentTcId);
   const extractDir = path.join(runDir, 'extracted');
   const txtPath = path.join(extractDir, `Day ${feedDate}`, 'File 1 - CNTLRPT', `cntlrpt-${feedDate}.txt`);
   if (!fs.existsSync(txtPath)) {
@@ -224,7 +226,7 @@ async function downloadCntlrpt(console: ConsolePage, runId: string, feedDate: st
 // seeded code/node id, never on row count.
 interface ErrfileRow { nodeId: string; nodeType: string; errorCode: string; sqlCode: string; description: string; }
 async function downloadExportErrfile(console: ConsolePage, runId: string, fileName: string): Promise<ErrfileRow[] | null> {
-  const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+  const runDir = runDirBrv4(runId, currentTcId);
   const extractDir = path.join(runDir, 'extracted');
   const csvPath = path.join(extractDir, 'Export', fileName);
   if (!fs.existsSync(csvPath)) {
@@ -2724,6 +2726,7 @@ CASES.push({
       await console.setFeedDate(FEED_DATE);
       await console.chooseFile(path.join(FEEDS_DIR, fn));
       const runId = await console.submitAndGetRunId();
+      noteUploadBrv4(runId);
       const run = await console.waitForRunToSettle(runId);
       status = String((run as any)?.status ?? 'UNKNOWN');
       logLines = console.getCollectedLogs();
@@ -2769,6 +2772,7 @@ CASES.push({
     await console.setFeedDate(FEED_DATE);
     await console.chooseFile(path.join(FEEDS_DIR, fn));
     const runId = await console.submitAndGetRunId();
+    noteUploadBrv4(runId);
     const immediate = await console.getRunStatus(runId);
     const immediateStatus = String(immediate?.status ?? 'UNKNOWN').toUpperCase();
 
@@ -2901,6 +2905,7 @@ CASES.push({
     await console.chooseFile(path.join(FEEDS_DIR, fn));
     await console.setRestart(true);
     const runId = await console.submitAndGetRunId();
+    noteUploadBrv4(runId);
     const restartRun = await console.waitForRunToSettle(runId);
     const restartStatus = String((restartRun as any)?.status ?? 'UNKNOWN');
     const restartLogs = console.getCollectedLogs();
@@ -3683,7 +3688,7 @@ CASES.push({
     const fn = 'ALLSTATE.LNA.BR-072-CANDIDATE.D20260908.txt';
     assembleFile(fn, [[firm.B, firm.C]]);
     const { runId, status } = await uploadAndSettle(console, fn);
-    const runDir = path.join(__dirname, '..', 'artifacts', 'e2e-brv4', 'runs', `run-${runId}`);
+    const runDir = runDirBrv4(runId, currentTcId);
     const zipPath = path.join(runDir, `ingestion-artifacts-${runId}.zip`);
     await console.openRun(runId);
     await console.downloadAllArtifacts(zipPath);
@@ -4074,12 +4079,14 @@ CASES.push({
 CASES.push({
   tcId: 'TC-BR-436', rule: 'BR-436',
   run: async (console) => {
-    // Corrected 2026-10-01: day1 used to be a plain buildFirm(), which already
-    // carries the baseline mailing address (PO BOX 1000 -> basic4 ALT_ADDRESS),
-    // so day2's "add" only replaced line 1 and the section count never moved.
-    // The rule allows either direction (2<->3); removal is used because a BD
-    // with no mailing address on day1 is itself a mandatory-field rejection
-    // (B0608, TC-BR-016), so the baseline stays a normal, valid BD.
+    // Re-targeted 2026-10-05 per dev triage on DEF-RDMS-BRV4-017 (not a
+    // defect): a standalone BD C record with a wholly blank correspondence
+    // block is rejected with C0708 before any write (legacy 8005-VAL-FIRM-PARA),
+    // and the BD MAILING row is never deleted by design (Type B = update-or-
+    // insert only). So the old expectation (ALT_ADDRESS gone, basic4 3 -> 2)
+    // is not reachable through the feed; this now asserts the rejection and
+    // that nothing moved. The address/contract/activity state is still
+    // captured so a run that is NOT rejected shows exactly what it did.
     const seq = seqFor('BR-436');
     const firm = buildFirm(seq); // baseline mailing address present on day1
     const fn1 = `ALLSTATE.LNA.BR-436-DAY1.D${DAY1}.txt`;
@@ -4089,7 +4096,20 @@ CASES.push({
     const sections = (row: any): any[] => (Array.isArray(row?.basic4_sections) ? row.basic4_sections : []);
     const hasMailing = (s: any[]) => s.some((x) => x?.type === 'ALT_ADDRESS');
     return withDb(async (client) => {
-      const before = sections((await client.query(sectionsSql, [firm.id.bd])).rows[0]);
+      // Address rows are keyed by pru_contract_number (e.g. A97N4N), not allstate_id.
+      const addrSql = `SELECT a.address_type, a.line1, a.city_name, a.crt_ts, a.updt_ts FROM pru_adb.address a
+        JOIN pru_adb.contract c ON a.ssn_or_contract_number = c.pru_contract_number
+        WHERE c.allstate_id = $1 ORDER BY a.address_type, a.crt_ts`;
+      const contractSql = 'SELECT node_id, pru_contract_number, updt_ts FROM pru_adb.contract WHERE allstate_id = $1';
+      const activitySql = `SELECT count(*)::int AS n FROM pru_adb.activity_log_entry e
+        JOIN pru_adb.contract c ON e.pru_contract_or_org_code = c.pru_contract_number WHERE c.allstate_id = $1`;
+      const snap = async () => ({
+        sections: sections((await client.query(sectionsSql, [firm.id.bd])).rows[0]),
+        addr: (await client.query(addrSql, [firm.id.bd])).rows,
+        contract: (await client.query(contractSql, [firm.id.bd])).rows[0],
+        activity: (await client.query(activitySql, [firm.id.bd])).rows[0].n,
+      });
+      const before = await snap();
       const noMailing = buildFirm(seq, { C: {
         'WS-CORRES-ADD-L1': '', 'WS-CORRES-ADD-L2': '', 'WS-CORRES-CITY': '', 'WS-CORRES-ST-CD': '',
         'WS-CORRES-ZIP-CD': '', 'WS-CORRES-PH-NUM': '', 'WS-CORRES-FAX-NUM': '', 'WS-CORRES-EMAIL': '',
@@ -4097,13 +4117,20 @@ CASES.push({
       const fn2 = `ALLSTATE.LNA.BR-436-DAY2.D${DAY2}.txt`;
       assembleFile(fn2, [[noMailing.C]], DAY2);
       const day2 = await uploadAndSettleAt(console, fn2, DAY2);
-      const after = sections((await client.query(sectionsSql, [firm.id.bd])).rows[0]);
+      const after = await snap();
+      const lnaerror = await downloadLnaerrorFile(console, day2.runId, DAY2);
+      const c0708Line = lnaerror.split(/\r?\n/).find((l) => l.includes(firm.id.bd) && /C0708/.test(l));
+      const cntl = await downloadCntlrpt(console, day2.runId, DAY2);
+      const updated = cntlCounter(cntl, 'NUMBER OF BD CONTRACTS UPDATED IN ADB');
       const types = (s: any[]) => JSON.stringify(s.map((x) => x?.type));
+      const unchanged = JSON.stringify(after) === JSON.stringify(before);
       return [
         { description: 'day1 baseline bundle committed with a mailing address', pass: day1.status === 'COMPLETED', detail: `status=${day1.status}` },
-        { description: 'day1 master record holds the mailing section (basic4 ALT_ADDRESS)', pass: hasMailing(before), detail: `sections=${types(before)}` },
-        { description: 'day2 standalone C-only update removing the mailing address completes (no B0700)', pass: day2.status === 'COMPLETED', detail: `status=${day2.status}` },
-        { description: 'adsi_master.contract_record.basic4_sections element count drops by one (e.g. 3 -> 2) and the ALT_ADDRESS section is gone', pass: before.length > 0 && after.length === before.length - 1 && !hasMailing(after), detail: `before=${before.length} ${types(before)} after=${after.length} ${types(after)}` },
+        { description: 'day1 master record holds the mailing section (basic4 ALT_ADDRESS)', pass: hasMailing(before.sections), detail: `sections=${types(before.sections)}` },
+        { description: 'day2 run with a standalone C carrying a wholly blank correspondence block completes', pass: day2.status === 'COMPLETED', detail: `status=${day2.status} runId=${day2.runId}` },
+        { description: "day2 LNAERROR contains a C0708 line ('correspondence address is required') naming this BD", pass: !!c0708Line, detail: `C0708 line=${c0708Line || '(none found)'}; LNAERROR bytes=${lnaerror.length}` },
+        { description: "day2 CNTLRPT 'NUMBER OF BD CONTRACTS UPDATED IN ADB' = 0 (the rejected record is not counted)", pass: updated === 0, detail: `updated=${updated}` },
+        { description: 'no ADB/ADSI change: address rows, contract updt_ts, activity count and basic4_sections (still incl. ALT_ADDRESS) identical before and after day2', pass: unchanged && hasMailing(after.sections), detail: `before=${JSON.stringify(before)} after=${JSON.stringify(after)}` },
       ];
     });
   },
@@ -4998,3 +5025,15 @@ CASES.push({
     });
   },
 });
+
+// Run folders are named for the case that created them (runs/run-<TC>-<time>/,
+// see runDirBrv4). Cases run one at a time, so the case currently running is
+// the one every download inside it belongs to.
+let currentTcId = '';
+for (const c of CASES) {
+  const run = c.run;
+  c.run = (console) => {
+    currentTcId = c.tcId;
+    return run(console);
+  };
+}

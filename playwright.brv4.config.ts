@@ -15,6 +15,15 @@ function loadDotEnv(file: string): void {
 }
 loadDotEnv(path.join(__dirname, '.env'));
 
+// Evidence runs (scripts/rerun-evidence-brv4.js) run one project per
+// invocation and point BRV4_EVIDENCE_ROOT at artifacts/post-rerun-<stamp>/.
+// Their reporter output and test output go under that folder's _raw/, so an
+// evidence run never replaces playwright-report-brv4/ or
+// artifacts/results-brv4.json, and one suite's output folder is never
+// cleaned by the next suite's invocation.
+const EVIDENCE_ROOT = process.env.BRV4_EVIDENCE_ROOT ? path.resolve(process.env.BRV4_EVIDENCE_ROOT) : '';
+const EVIDENCE_SUITE = process.env.BRV4_EVIDENCE_SUITE || 'all';
+
 /**
  * PRU ADB HR Master Console - isolated Playwright configuration for the
  * BRv4-uncovered-rules suite (see data/test-cases.brv4.json).
@@ -35,19 +44,29 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [
-    ['list'],
-    ['html', { outputFolder: 'playwright-report-brv4', open: 'never' }],
-    ['json', { outputFile: 'artifacts/results-brv4.json' }],
-  ],
+  reporter: EVIDENCE_ROOT
+    ? [
+        ['list'],
+        ['blob', { outputDir: path.join(EVIDENCE_ROOT, '_raw', 'blob', EVIDENCE_SUITE), fileName: `${EVIDENCE_SUITE}.zip` }],
+        ['json', { outputFile: path.join(EVIDENCE_ROOT, '_raw', 'json', `${EVIDENCE_SUITE}.json`) }],
+      ]
+    : [
+        ['list'],
+        ['html', { outputFolder: 'playwright-report-brv4', open: 'never' }],
+        ['json', { outputFile: 'artifacts/results-brv4.json' }],
+      ],
+  ...(EVIDENCE_ROOT ? { outputDir: path.join(EVIDENCE_ROOT, '_raw', 'test-output', EVIDENCE_SUITE) } : {}),
   use: {
     baseURL: process.env.BASE_URL || 'https://pru-adb-dev.ap-southeast-1.elasticbeanstalk.com',
     ignoreHTTPSErrors: true,
     actionTimeout: 30 * 1000,
     navigationTimeout: 60 * 1000,
-    screenshot: 'only-on-failure',
+    // Every browser test keeps its final screenshot and its recording, pass
+    // or fail - they are part of each TC's evidence. Projects that never
+    // open a page (e2e-validate-brv4) produce neither.
+    screenshot: 'on',
     trace: 'retain-on-failure',
-    video: 'off',
+    video: 'on',
   },
   // Listed in run order. With workers: 1, Playwright runs projects in the
   // order they appear here, so a single "run all" (CLI or the UI's top-level

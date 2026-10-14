@@ -3,6 +3,7 @@ import { loadTestCasesBrv4 } from '../../utils/registry.brv4';
 import { readRunBrv4, recordVerdictBrv4, recordBlockedUnlessDecidedBrv4 } from '../../utils/verdict-store.brv4';
 import { judgeBrv4 } from '../../utils/verdict-rules.brv4';
 import type { TestCaseBrv4 } from '../../utils/types.brv4';
+import { captureEvidenceBrv4 } from '../../utils/evidence.brv4';
 
 /**
  * Validation phase for the isolated BRv4-uncovered-rules suite. Reads only
@@ -37,6 +38,9 @@ function assertionFeed(tc: TestCaseBrv4) {
 }
 
 test.describe('PRU ADB - BRv4 uncovered-rules validation', () => {
+  // Evidence runs only (BRV4_EVIDENCE_ROOT) - a no-op otherwise. See utils/evidence.brv4.ts.
+  test.afterEach(async ({}, testInfo) => captureEvidenceBrv4(testInfo, 'e2e-validate-brv4'));
+
   // Hidden cases still get their BLOCKED placeholder verdict (never
   // overwriting a decided one), exactly as when they were listed, so the
   // final report keeps covering every case.

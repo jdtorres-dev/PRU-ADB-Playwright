@@ -3,8 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { extractArtifacts, locateArtifacts } from '../../utils/artifact-validator';
 import { loadFeedsBrv4, loadGenerationBrv4, feedAbsolutePathBrv4, casesForFeedBrv4, loadTestCasesBrv4 } from '../../utils/registry.brv4';
-import { recordRunBrv4, E2E_ROOT_BRV4 } from '../../utils/verdict-store.brv4';
+import { recordRunBrv4, E2E_ROOT_BRV4, noteUploadBrv4, runDirBrv4 } from '../../utils/verdict-store.brv4';
 import { summariseLogs } from '../../utils/verdict-store';
+import { traceConsoleBrv4, captureEvidenceBrv4 } from '../../utils/evidence.brv4';
 
 /**
  * Execution phase for the isolated BRv4-uncovered-rules suite (189 new test
@@ -34,6 +35,10 @@ const cases = loadTestCasesBrv4();
 const generation = loadGenerationBrv4();
 
 test.describe.configure({ mode: 'serial' });
+
+// Evidence runs only (BRV4_EVIDENCE_ROOT) - no-ops otherwise. See utils/evidence.brv4.ts.
+test.beforeEach(({ authenticatedConsole }) => traceConsoleBrv4(authenticatedConsole));
+test.afterEach(async ({ authenticatedConsole }, testInfo) => captureEvidenceBrv4(testInfo, 'e2e-execute-brv4', authenticatedConsole));
 
 test.beforeAll(() => {
   fs.mkdirSync(E2E_ROOT_BRV4, { recursive: true });
@@ -80,6 +85,7 @@ for (const feed of feeds) {
 
       await test.step('submit the upload', async () => {
         runId = await authenticatedConsole.submitAndGetRunId();
+        noteUploadBrv4(runId);
         expect(runId).toBeTruthy();
         test.info().annotations.push({ type: 'runId', description: runId });
       });
@@ -101,14 +107,15 @@ for (const feed of feeds) {
 
       await test.step('download the General Artifacts ALL (.zip)', async () => {
         await authenticatedConsole.openRun(runId);
-        zipPath = path.join(E2E_ROOT_BRV4, 'runs', `run-${runId}`, `ingestion-artifacts-${runId}.zip`);
+        // runs/run-<TC id(s)>-<upload time>/ - see runDirBrv4.
+        zipPath = path.join(runDirBrv4(runId, feed.cases.length ? feed.cases : linked.map((c) => c.id)), `ingestion-artifacts-${runId}.zip`);
         await authenticatedConsole.downloadAllArtifacts(zipPath);
         expect(fs.existsSync(zipPath), 'the artifacts ZIP must be saved').toBeTruthy();
         expect(fs.statSync(zipPath).size, 'the artifacts ZIP must not be empty').toBeGreaterThan(0);
       });
 
       await test.step('extract the artifacts', async () => {
-        extractedDir = path.join(E2E_ROOT_BRV4, 'runs', `run-${runId}`, 'extracted');
+        extractedDir = path.join(path.dirname(zipPath), 'extracted');
         extractArtifacts(zipPath, extractedDir);
         artifacts = locateArtifacts(extractedDir) as Record<string, string>;
         test.info().annotations.push({
