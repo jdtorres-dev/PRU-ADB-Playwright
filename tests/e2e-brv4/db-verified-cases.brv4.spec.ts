@@ -1,6 +1,7 @@
 import { test, expect } from '../../fixtures/console.fixture';
 import { CASES, reserveSeqRange, snapshotUnprocessedActivity, releaseFailedHr2Leftovers } from '../../utils/db-verified-cases.brv4';
 import { recordVerdictBrv4 } from '../../utils/verdict-store.brv4';
+import { traceConsoleBrv4, captureEvidenceBrv4 } from '../../utils/evidence.brv4';
 
 /**
  * Real, saved automation for the BRv4 DB-fixture test cases (33 rules whose
@@ -28,6 +29,10 @@ test.describe('PRU ADB - BRv4 DB-verified cases', () => {
   test.beforeAll(async () => {
     await reserveSeqRange();
   });
+
+  // Evidence runs only (BRV4_EVIDENCE_ROOT) - no-ops otherwise. See utils/evidence.brv4.ts.
+  test.beforeEach(({ authenticatedConsole }) => traceConsoleBrv4(authenticatedConsole));
+  test.afterEach(async ({ authenticatedConsole }, testInfo) => captureEvidenceBrv4(testInfo, 'e2e-db-brv4', authenticatedConsole));
 
   for (const c of CASES) {
     test(`${c.tcId} ${c.rule}`, async ({ authenticatedConsole }) => {

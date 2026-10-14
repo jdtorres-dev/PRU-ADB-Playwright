@@ -37,6 +37,33 @@ export const E2E_ROOT_BRV4 = path.join(ROOT, 'e2e-brv4');
 export const VERDICT_DIR_BRV4 = path.join(E2E_ROOT_BRV4, 'verdicts');
 export const RUN_DIR_BRV4 = path.join(E2E_ROOT_BRV4, 'runs');
 
+// Run folders under runs/ are named run-<TC id(s)>-<YYYYMMDD-HHMMSS>, the
+// upload's local time, so a folder says which TC it belongs to and when it
+// ran. The run id stays in the ZIP name (ingestion-artifacts-<runId>.zip) and
+// in the run record. Same run id -> same folder for the life of the process.
+const runDirNames = new Map<string, string>();
+const uploadTimes = new Map<string, Date>();
+
+/** Records when a run was uploaded, so its folder is stamped with the upload time, not the later download time. */
+export function noteUploadBrv4(runId: string, at: Date = new Date()): void {
+  if (runId && !uploadTimes.has(runId)) uploadTimes.set(runId, at);
+}
+
+export function runDirBrv4(runId: string, tcIds: string | string[]): string {
+  let name = runDirNames.get(runId);
+  if (!name) {
+    const at = uploadTimes.get(runId) ?? new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const stamp = `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}-${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`;
+    const label = (Array.isArray(tcIds) ? tcIds.join('_') : tcIds).replace(/[^A-Za-z0-9_-]/g, '_') || 'unknown';
+    name = `run-${label}-${stamp}`;
+    // Two runs of the same TC uploaded within the same second.
+    for (let n = 2; fs.existsSync(path.join(RUN_DIR_BRV4, name)); n++) name = `run-${label}-${stamp}-${n}`;
+    runDirNames.set(runId, name);
+  }
+  return path.join(RUN_DIR_BRV4, name);
+}
+
 export function recordVerdictBrv4(v: Omit<VerdictBrv4, 'decidedAt'>): VerdictBrv4 {
   const full: VerdictBrv4 = { ...v, decidedAt: new Date().toISOString() };
   fs.mkdirSync(VERDICT_DIR_BRV4, { recursive: true });
