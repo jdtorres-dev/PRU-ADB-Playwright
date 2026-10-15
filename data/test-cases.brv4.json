@@ -327,7 +327,7 @@
       {
         "kind": "artifactContains",
         "artifact": "LOADFILE",
-        "needle": "123123",
+        "needle": "995012505123",
         "description": "the control bundle's producer is committed, proving the failure did not spill over"
       }
     ],
